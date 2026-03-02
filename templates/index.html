@@ -1,0 +1,367 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Gerador de Precificação Inteligente</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #f0f4f8 0%, #ffffff 100%);
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+            color: #333;
+            min-height: 100vh;
+        }
+        .main-container {
+            max-width: 900px;
+            margin: 40px auto;
+            background: rgba(255, 255, 255, 0.9);
+            border-radius: 20px;
+            padding: 40px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.05);
+        }
+        .section-title {
+            font-size: 0.8rem;
+            font-weight: 700;
+            color: #adb5bd;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            text-align: center;
+            margin: 30px 0 15px 0;
+        }
+        .form-control {
+            border-radius: 8px;
+            border: 1px solid #dee2e6;
+            padding: 10px 15px;
+            color: #495057;
+        }
+        .form-control:focus {
+            border-color: #3b82f6;
+            box-shadow: 0 0 0 0.2rem rgba(59, 130, 246, 0.25);
+        }
+        label {
+            font-size: 0.85rem;
+            font-weight: 600;
+            color: #6c757d;
+            margin-bottom: 5px;
+        }
+        .input-icon-wrapper {
+            position: relative;
+        }
+        .input-icon-wrapper i {
+            position: absolute;
+            left: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #adb5bd;
+        }
+        .input-icon-wrapper input {
+            padding-left: 40px;
+        }
+        /* Drop Zones */
+        .drop-zone {
+            border: 2px dashed #ced4da;
+            border-radius: 12px;
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            background: #fff;
+        }
+        .drop-zone:hover, .drop-zone.dragover {
+            border-color: #3b82f6;
+            background: #f8faff;
+        }
+        .drop-zone .icon-circle {
+            width: 50px;
+            height: 50px;
+            border-radius: 50%;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin-bottom: 15px;
+            font-weight: bold;
+            font-size: 0.8rem;
+        }
+        .xml-icon { background: #e0f2fe; color: #0284c7; }
+        .csv-icon { background: #dcfce7; color: #16a34a; }
+        .drop-zone-title { font-weight: 700; font-size: 1rem; margin-bottom: 5px; }
+        .drop-zone-sub { font-size: 0.8rem; color: #adb5bd; }
+
+        /* Container Variáveis */
+        .variables-container {
+            border: 1px solid #f1f3f5;
+            border-radius: 12px;
+            padding: 25px;
+            background: #fff;
+        }
+        .input-group-text {
+            background: transparent;
+            border-left: none;
+            color: #adb5bd;
+            font-size: 0.9rem;
+        }
+        .input-group input {
+            border-right: none;
+        }
+
+        /* Botões */
+        .btn-primary-custom {
+            background-color: #3b82f6;
+            border: none;
+            border-radius: 30px;
+            padding: 12px 30px;
+            font-weight: 600;
+            transition: all 0.3s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .btn-primary-custom:hover {
+            background-color: #2563eb;
+            transform: translateY(-2px);
+        }
+
+        /* Tabela Preview */
+        .table-responsive {
+            max-height: 400px;
+            border-radius: 10px;
+            border: 1px solid #dee2e6;
+        }
+        .table thead th {
+            position: sticky;
+            top: 0;
+            background: #f8f9fa;
+            font-size: 0.8rem;
+            text-transform: uppercase;
+            color: #495057;
+            z-index: 1;
+        }
+        .table tbody td {
+            font-size: 0.85rem;
+        }
+        /* Cores do Preview */
+.bg-azul { background-color: #BDD7EE !important; }
+.bg-amarelo { background-color: #FFF2CC !important; }
+.table-st td { background-color: #FCE4D6 !important; }
+
+/* Barra de Rolagem Visível e Estilizada (Padrão Windows) */
+.table-container {
+    overflow: auto;
+    max-height: 500px;
+    border: 1px solid #dee2e6;
+    background: white;
+}
+.table-container::-webkit-scrollbar { width: 12px; height: 12px; }
+.table-container::-webkit-scrollbar-track { background: #f1f1f1; }
+.table-container::-webkit-scrollbar-thumb {
+    background: #888;
+    border-radius: 10px;
+    border: 3px solid #f1f1f1;
+}
+
+/* Impede que a tabela esprema as colunas */
+#tabela-conteudo table {
+    min-width: 2800px;
+    white-space: nowrap;
+}
+    </style>
+</head>
+<body>
+
+<div class="main-container">
+    <div class="text-center mb-4">
+        <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="60" class="mb-3">
+        <h2 class="font-weight-bold" style="color: #1e293b;">Gerador de Precificação Inteligente</h2>
+        <p class="text-muted" style="font-size: 0.9rem;">Preencha os dados abaixo para gerar sua planilha automaticamente.</p>
+    </div>
+
+    <form id="appForm">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <label>Nome do Fornecedor</label>
+                <div class="input-icon-wrapper">
+                    <i class="bi bi-shop"></i>
+                    <input type="text" class="form-control" name="fornecedor" placeholder="Ex: Fornecedor ABC Ltda" required>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <label>Número da Nota (Referência)</label>
+                <div class="input-icon-wrapper">
+                    <i class="bi bi-receipt"></i>
+                    <input type="text" class="form-control" name="nota" placeholder="Ex: 000.123.456" required>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">IMPORTAÇÃO DE ARQUIVOS</div>
+
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="drop-zone" id="drop-xml" onclick="document.getElementById('file-xml').click()">
+                    <div class="icon-circle xml-icon">XML</div>
+                    <div class="drop-zone-title" id="title-xml">XML da NFe</div>
+                    <div class="drop-zone-sub">Arraste ou clique para selecionar</div>
+                    <input type="file" id="file-xml" name="xml" accept=".xml" hidden required>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="drop-zone" id="drop-csv" onclick="document.getElementById('file-csv').click()">
+                    <div class="icon-circle csv-icon">CSV</div>
+                    <div class="drop-zone-title" id="title-csv">CSV do Sistema</div>
+                    <div class="drop-zone-sub">Arraste ou clique para selecionar</div>
+                    <input type="file" id="file-csv" name="csv" accept=".csv" hidden required>
+                </div>
+            </div>
+        </div>
+
+        <div class="section-title">VARIÁVEIS DE NEGÓCIO</div>
+
+        <div class="variables-container">
+            <div class="row g-4">
+                <div class="col-md-4">
+                    <label>Multiplicador Varejo</label>
+                    <input type="number" step="0.01" class="form-control" name="mult_var" value="2.0">
+                </div>
+                <div class="col-md-4">
+                    <label>Multiplicador Atacado</label>
+                    <input type="number" step="0.01" class="form-control" name="mult_atc" value="1.3">
+                </div>
+                <div class="col-md-4">
+                    <label>Despesas Operacionais</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="desp" value="10">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label>Frete / Logística</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="frete" value="10">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label>Crédito ICMS</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="cred_icms" value="4">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label>Imposto Federal</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="fed" value="9.13">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+
+                <div class="col-md-4">
+                    <label>ICMS Venda</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="icm" value="20">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label>Taxa Cartão</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="cartao" value="4">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <label>Desconto Atacado</label>
+                    <div class="input-group">
+                        <input type="number" step="0.01" class="form-control" name="desc_atc" value="15">
+                        <span class="input-group-text">%</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="text-center mt-5">
+            <button type="submit" class="btn btn-primary btn-primary-custom" id="btn-submit">
+                <i class="bi bi-rocket-takeoff me-2"></i> Gerar Prévia da Planilha
+            </button>
+        </div>
+
+        <div id="alert-box" class="alert mt-4 d-none" role="alert"></div>
+
+        <div id="preview-section" class="mt-4 d-none">
+            <div class="section-title text-start mb-2">PRÉVIA DOS DADOS</div>
+            <div class="table-responsive mb-4" id="table-container"></div>
+
+            <div class="text-center">
+                <a id="btn-download" href="#" class="btn btn-success btn-primary-custom" style="background-color: #16a34a;">
+                    <i class="bi bi-download me-2"></i> Confirmar e Baixar excel
+                </a>
+            </div>
+        </div>
+    </form>
+</div>
+
+<script>
+    // Configuração Drag and Drop
+    function setupZone(type) {
+        const zone = document.getElementById('drop-' + type);
+        const input = document.getElementById('file-' + type);
+        const title = document.getElementById('title-' + type);
+
+        zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('dragover'); };
+        zone.ondragleave = () => { zone.classList.remove('dragover'); };
+        zone.ondrop = (e) => {
+            e.preventDefault(); zone.classList.remove('dragover');
+            if(e.dataTransfer.files.length) {
+                input.files = e.dataTransfer.files;
+                title.innerHTML = `<i class="bi bi-check-circle-fill text-success"></i> ${input.files[0].name}`;
+            }
+        };
+        input.onchange = () => {
+            if(input.files.length) {
+                title.innerHTML = `<i class="bi bi-check-circle-fill text-success"></i> ${input.files[0].name}`;
+            }
+        };
+    }
+    setupZone('xml');
+    setupZone('csv');
+
+    // Submissão do Formulário
+    document.getElementById('appForm').onsubmit = async (e) => {
+        e.preventDefault();
+        const btn = document.getElementById('btn-submit');
+        const alertBox = document.getElementById('alert-box');
+        const previewSec = document.getElementById('preview-section');
+
+        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processando...';
+        btn.disabled = true;
+        alertBox.classList.add('d-none');
+        previewSec.classList.add('d-none');
+
+        const formData = new FormData(e.target);
+
+        try {
+            const res = await fetch('/processar', { method: 'POST', body: formData });
+            const data = await res.json();
+
+            if (data.sucesso) {
+                document.getElementById('table-container').innerHTML = data.tabela;
+                document.getElementById('btn-download').href = data.download_url;
+                previewSec.classList.remove('d-none');
+            } else {
+                alertBox.className = "alert alert-danger mt-4";
+                alertBox.innerText = data.erro;
+                alertBox.classList.remove('d-none');
+            }
+        } catch (err) {
+            alertBox.className = "alert alert-danger mt-4";
+            alertBox.innerText = "Erro ao se comunicar com o servidor.";
+            alertBox.classList.remove('d-none');
+        } finally {
+            btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Atualizar Prévia';
+            btn.disabled = false;
+        }
+    };
+</script>
+</body>
+</html>
