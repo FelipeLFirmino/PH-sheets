@@ -154,26 +154,31 @@ pyinstaller --noconfirm --onefile --windowed --add-data "templates;templates" --
 
 ---
 
-### 3. Automatizando com um Script de Build
 
-Para facilitar sua vida ao configurar várias máquinas, você pode deixar um arquivo chamado `build.bat` na raiz do seu projeto no GitHub com este conteúdo:
+### 2. Comando para Gerar o App (`.app`)
 
-```batch
-@echo off
-echo Iniciando criacao do executavel...
-python -m venv venv
-call venv\Scripts\activate
-pip install -r requirements.txt
-pip install pyinstaller
-pyinstaller --noconfirm --onefile --windowed --add-data "templates;templates" --add-data "static;static" app.py
-echo Concluido! O arquivo esta na pasta dist.
-pause
+Execute o comando abaixo na raiz do projeto. Este comando cria um bundle de aplicativo do macOS que pode ser movido para a pasta /Applications.
+
+```bash
+pyinstaller --noconfirm --onefile --windowed \
+    --add-data "templates:templates" \
+    --add-data "static:static" \
+    --icon "static/logo.png" \
+    --name "PrecificadoraDaOnda" \
+    app.py
 
 ```
 
+### Detalhes das Flags:
+
+* **`--windowed`**: Cria um arquivo `.app`. Sem isso, o Mac trataria apenas como um script de terminal.
+* **`--add-data "templates:templates"`**: Copia a pasta de HTML para dentro do pacote. Note o uso do `:` (padrão Unix/Mac).
+* **`--name`**: Define o nome que aparecerá no Finder.
+
+
 ---
 
-### 4. Entrega Final ao Usuário
+### 3. Entrega Final ao Usuário
 
 Após o processo terminar, uma pasta chamada `dist` será criada. Dentro dela estará o seu arquivo `app.exe`.
 
@@ -184,4 +189,14 @@ Após o processo terminar, uma pasta chamada `dist` será criada. Dentro dela es
 
 > **Nota Importante:** Ao rodar pela primeira vez no Windows, o antivírus ou o SmartScreen pode exibir um alerta. Como o executável não possui uma assinatura digital paga, basta o usuário clicar em "Mais informações" e "Executar assim mesmo".
 
-Gostaria que eu montasse o script de build específico para o seu Mac, caso queira gerar a versão `.app` para outros usuários de Apple?
+### como Atualizar o App para os Usuários
+
+Como você transformou a aplicação em um executável local (o arquivo .app ou .exe), ela não se atualiza sozinha pela internet. Ela agora é como um programa normal do computador (tipo o Word ou o Photoshop antigo). O GitHub serve apenas para você versionar o código-fonte, não para entregar o executável aos leigos.
+
+1. Você altera o código: Você melhora algo no código e testa no seu Mac.
+
+2. Gera um novo Build: Você roda aquele comando do PyInstaller novamente (pyinstaller --noconfirm --windowed ... app.py). O PyInstaller vai apagar a versão velha na pasta dist e criar o novo PrecificadoraDaOnda.app atualizado.
+
+3. Distribuição: Você compacta esse novo .app (botão direito -> Comprimir) para virar um arquivo .zip e envia para os seus funcionários (por WhatsApp, Slack, Google Drive, etc.).
+
+4. Instalação no usuário: O funcionário apaga o ícone antigo que ele tinha na Área de Trabalho e substitui pelo ícone novo que você enviou. Pronto.
