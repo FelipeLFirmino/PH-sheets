@@ -1,8 +1,11 @@
 altgraph==0.17.5
 blinker==1.9.0
+certifi==2026.2.25
+charset-normalizer==3.4.4
 click==8.3.1
 et_xmlfile==2.0.0
 Flask==3.0.2
+idna==3.11
 itsdangerous==2.2.0
 Jinja2==3.1.6
 macholib==1.16.4
@@ -11,11 +14,14 @@ numpy==1.26.4
 openpyxl==3.1.5
 packaging==26.0
 pandas==2.2.1
+pillow==12.1.1
 pyinstaller==6.19.0
 pyinstaller-hooks-contrib==2026.1
 python-dateutil==2.9.0.post0
 pytz==2025.2
+requests==2.32.5
 setuptools==82.0.0
 six==1.17.0
 tzdata==2025.3
+urllib3==2.6.3
 Werkzeug==3.0.1
