@@ -39,7 +39,7 @@ def _calcular(row, P):
 
     fed    = round(p_var * P['fed'],    2)
     cartao = round(p_var * P['cartao'], 2)
-    icms_s = round(p_var * P['icm'],    2)
+    icms_s = 0.0 if st_u > 0.005 else round(p_var * P['icm'], 2)
     c_saida = round(c_ent + fed + cartao + icms_s, 2)
 
     meta   = 0.15
@@ -54,7 +54,7 @@ def _calcular(row, P):
     p_atc       = round(p_var * (1 - desc_atc), 2)
     fed_atc     = round(nf_atc * P['fed'], 2)
     cart_atc    = round(p_atc  * P['cartao'], 2)
-    icm_atc     = round(nf_atc * P['icm'], 2)
+    icm_atc     = 0.0 if st_u > 0.005 else round(nf_atc * P['icm'], 2)
     c_saida_atc = round(c_ent + fed_atc + cart_atc + icm_atc, 2)
     margem_atc  = round((p_atc - c_saida_atc) / p_atc, 4) if p_atc > 0 else 0.0
 

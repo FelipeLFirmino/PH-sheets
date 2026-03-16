@@ -8,10 +8,13 @@ from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from openpyxl.utils import get_column_letter
 
 # ─── Padrão embalagem ────────────────────────────────────────────────────────
-_PATTERN_EMB = re.compile(
-    r'(?:^(\d+)\s|(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+))',
+# Padrão 1 (original): "CAIXA COM 12", "PCT C/24", "KIT COM 6"
+_PATTERN_EMB_EXPLICITO = re.compile(
+    r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+)',
     re.IGNORECASE
 )
+# Padrão 2 (Oxford/fornecedores): "12 CANECAS...", "6 TIGELAS..."
+_PATTERN_EMB_INICIO = re.compile(r'^(\d+)\s+\S', re.IGNORECASE)
 
 # ─── Mapeamento de colunas (1-based) ─────────────────────────────────────────
 #
@@ -93,10 +96,15 @@ def get_xml_text(node, xpath, ns, default=""):
 
 
 def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult):
-    match = _PATTERN_EMB.search(desc_xml)
-    if not match:
-        return 1
-    qtd = int(match.group(1))
+    match = _PATTERN_EMB_EXPLICITO.search(desc_xml)
+    if match:
+        qtd = int(match.group(1))
+    else:
+        match2 = _PATTERN_EMB_INICIO.search(desc_xml)
+        if match2:
+            qtd = int(match2.group(1))
+        else:
+            return 1
     if qtd <= 1:
         return 1
     if p_sys > 0 and (p_sys * qtd) > (v_un_xml * mult * 3):
@@ -253,15 +261,18 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
         rows = []
         for _, row in df_base.iterrows():
             q       = max(float(row['qCom']), 1)
-            nf_u    = round(row['vProd'] / q, 2)
-            st_u    = round(row['vST']   / q, 2)
-            ant_u   = round(row['vANT']  / q, 2)
-            ipi_u   = round(row['vIPI']  / q, 2)
-            cst     = str(row['cst'])
             qtd_emb = int(row['qtd_emb'])
 
+            # Dividir custos NF pela embalagem → tudo por UNIDADE vendida
+            nf_u    = round(row['vProd'] / q / qtd_emb, 2)
+            st_u    = round(row['vST']   / q / qtd_emb, 2)
+            ant_u   = round(row['vANT']  / q / qtd_emb, 2)
+            ipi_u   = round(row['vIPI']  / q / qtd_emb, 2)
+            cst     = str(row['cst'])
+
+            # Preço do sistema já é por unidade — NÃO multiplicar por embalagem
             p_sys_val        = float(row['preco_sys']) if pd.notna(row['preco_sys']) else 0.0
-            preco_venda_base = round(p_sys_val * qtd_emb, 2) if p_sys_val > 0.01 else 0.0
+            preco_venda_base = round(p_sys_val, 2) if p_sys_val > 0.01 else 0.0
 
             rows.append({
                 'nf':        row['nf_base'],
@@ -455,8 +466,10 @@ def salvar_excel_estilizado(dados, path):
         # Q - CARTÃO = P_VAR × CART%
         ws.cell(r, COL['CARTAO']).value = f"=ROUND({W}{r}*{Qc}$2,2)"
 
-        # R - ICMS SAÍDA = P_VAR × ICMS%
-        ws.cell(r, COL['ICMS_S']).value = f"=ROUND({W}{r}*{Rc}$2,2)"
+        # R - ICMS SAÍDA = P_VAR × ICMS%  (0 se ST — ICMS já recolhido pelo substituto)
+        ws.cell(r, COL['ICMS_S']).value = (
+            f"=IF({G}{r}>0,0,ROUND({W}{r}*{Rc}$2,2))"
+        )
 
         # S - CUSTO SAÍDA = C_ENT + FED + CART + ICMS
         ws.cell(r, COL['C_SAIDA']).value = (
@@ -493,8 +506,10 @@ def salvar_excel_estilizado(dados, path):
         # AB - CARTÃO ATC = P_ATC × CART%
         ws.cell(r, COL['CART_ATC']).value = f"=ROUND({Za}{r}*{Qc}$2,2)"
 
-        # AC - ICMS ATC = NF_ATC × ICM%
-        ws.cell(r, COL['ICM_ATC']).value = f"=ROUND({Ya}{r}*{Rc}$2,2)"
+        # AC - ICMS ATC = NF_ATC × ICM%  (0 se ST — ICMS já recolhido pelo substituto)
+        ws.cell(r, COL['ICM_ATC']).value = (
+            f"=IF({G}{r}>0,0,ROUND({Ya}{r}*{Rc}$2,2))"
+        )
 
         # AD - CUSTO SAÍDA ATC = C_ENT + FED_ATC + CART_ATC + ICM_ATC
         ws.cell(r, COL['C_SAIDA_ATC']).value = (
