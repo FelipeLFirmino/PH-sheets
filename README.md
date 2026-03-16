@@ -1,202 +1,205 @@
+# 🧾 Precificadora Inteligente
 
- Precificadora Inteligente
+Ferramenta local de precificação automatizada para varejo. Processa arquivos **XML (NFe)** e **CSV (Sistema)** e gera planilhas Excel com cálculos completos de custo, impostos e margem, além de um dashboard visual de análise da nota.
 
-Este projeto é uma ferramenta local de organização financeira e precificação automatizada. Ele processa arquivos **XML (NFe)** e **CSV (Sistema)** para gerar planilhas de precificação detalhadas em formato Excel, aplicando regras de negócio específicas para varejo e atacado.
+---
 
 ## 🚀 Tecnologias Utilizadas
 
-* **Backend:** Python 3.x com Flask.
-* **Processamento de Dados:** Pandas para manipulação de tabelas e cruzamento de dados.
-* **Manipulação de XML:** ElementTree para extração de dados da NFe.
-* **Geração de Excel:** Openpyxl para aplicação de estilos, bordas e cores.
-* **Frontend:** HTML5, CSS3 (Bootstrap) e JavaScript nativo para suporte a Drag & Drop.
+| Camada | Tecnologia |
+|--------|-----------|
+| Backend | Python 3.x + Flask |
+| Processamento | Pandas (merge/fallback EAN → REF) |
+| XML | ElementTree (extração de NFe) |
+| Excel | **Openpyxl puro** (sem pandas.to_excel — garante fórmulas no Mac/Windows) |
+| Frontend | HTML5 + Bootstrap + JavaScript nativo (Drag & Drop) |
+| Impostos externos | API SEFAZ AL (ST e Antecipado) |
+
+---
 
 ## 🛠️ Instalação e Configuração
 
-Siga os passos abaixo para configurar o ambiente em sua máquina local (macOS com chip M1/M2/M3):
+### macOS (M1/M2/M3)
 
-1. **Clonar o repositório:**
 ```bash
+# 1. Clonar o repositório
 git clone https://github.com/seu-usuario/ph-SheetGenerator.git
 cd ph-SheetGenerator
 
-```
-
-
-2. **Criar e ativar o ambiente virtual:**
-```bash
+# 2. Criar e ativar ambiente virtual
 python3 -m venv venv
 source venv/bin/activate
 
+# 3. Instalar dependências
+pip install Flask pandas openpyxl requests
 ```
 
+> **Nota:** o pacote `requests` é necessário para a consulta à API da SEFAZ AL (ST/Antecipado).
 
-3. **Instalar as dependências:**
-```bash
-pip install Flask pandas openpyxl
-
-```
-
-
+---
 
 ## 📖 Como Usar
 
 1. Execute o servidor Flask:
 ```bash
 python3 app.py
-
 ```
 
+2. O navegador abrirá automaticamente em `http://127.0.0.1:8080`.
+3. Preencha o **Nome do Fornecedor** e o **Número da Nota**.
+4. Arraste o **XML da NFe** e o **CSV do sistema** para as áreas indicadas.
+5. Ajuste os parâmetros financeiros (multiplicador, impostos, frete, crédito de ICMS).
+6. Clique em **Gerar Prévia** para visualizar os dados e o dashboard na tela.
+7. Clique em **Baixar Excel** para salvar a planilha estilizada com fórmulas.
 
-2. O navegador abrirá automaticamente no endereço `http://127.0.0.1:5000`.
-3. Insira o **Nome do Fornecedor** e o **Número da Nota**.
-4. Arraste o arquivo **XML da NFe** e o **CSV do seu sistema** para as áreas indicadas.
-5. Ajuste os parâmetros financeiros (Margens, Impostos, Frete) conforme necessário.
-6. Clique em **Gerar Prévia da Planilha** para visualizar os dados na tela.
-7. Clique em **Confirmar e Baixar Excel** para salvar o arquivo estilizado.
+---
 
-## 🧠 Lógica de Processamento e Regras de Negócio
+## 🧠 Lógica de Processamento
 
-O motor de cálculo utiliza uma lógica de busca resiliente para garantir que o preço atual do produto seja encontrado no sistema:
+### Busca de Preço (Fallback)
+1. Tenta cruzar pelo **EAN** (código de barras)
+2. Se não encontrar preço válido (ou preço = R$ 0,01), tenta pela **Referência/Código**
+3. Se ainda não encontrar, o preço de venda é calculado automaticamente via `arredondar_99(Custo Real × 2)`
 
-* **Mecanismo de Fallback:** O sistema tenta primeiro cruzar os dados pelo **EAN (Código de Barras)**. Caso não encontre um preço válido, ele realiza uma segunda tentativa utilizando a **Referência/Código do Produto**.
-* **Cálculo de Impostos:** ICMS, Impostos Federais e Taxas de Cartão são calculados com base no preço de venda final.
-* **Arredondamento de Marketing:** Preços de varejo são automaticamente arredondados para a terminação `.99`.
+### Detecção de Embalagem
+O sistema lê a descrição do XML (ex: *"CAIXA COM 12"*, *"CAIXA COM 24"*) e multiplica o preço unitário do sistema pela quantidade da embalagem para calcular o **Preço Atual** correto.
+
+**Proteção anti-absurdo:** se o resultado da multiplicação for mais que 3× o custo esperado, o sistema assume que o cadastro já tem o preço da caixa e não multiplica (ex: grampos com 5000 unidades).
+
+### Fluxos de Cálculo
+
+#### Produto SEM Substituição Tributária
+```
+Custo Entrada = NF unit + IPI + Frete(10%) + Despesa(10%) - Crédito ICMS(variável)
+Custo Real    = Custo Entrada × Multiplicador
+Custo Saída   = Custo Real + Federal(9,13%) + Cartão(4%) + ICMS Saída(21%)
+Preço Mín.    = Custo Saída ÷ (1 - Meta%)
+```
+
+> O **Crédito de ICMS** é variável conforme a origem do produto:
+> - Importado: 4% | SP: 7% | PE: 12% | AL: 19%
+
+#### Produto COM Substituição Tributária (ST)
+```
+Custo Entrada = NF unit + ST + ANT + IPI + Frete(10%) + Despesa(10%)
+Custo Real    = Custo Entrada × Multiplicador
+Custo Saída   = Custo Real + Federal(9,13%) + Cartão(4%) + ICMS Saída(21%)
+Preço Mín.    = Custo Saída ÷ (1 - Meta%)
+```
+
+> ST e Antecipado são consultados automaticamente na **API da SEFAZ AL**.  
+> O campo **Crédito de ICMS** é zerado automaticamente quando há ST.
+
+---
 
 ## 🎨 Formatação da Planilha (Excel)
 
-A planilha gerada segue um padrão visual rígido para facilitar a análise:
+### Estrutura de Colunas
+| Col | Campo | Tipo |
+|-----|-------|------|
+| A–E | NF, Descrição, REF, SKU, QTD | Fixo (XML) |
+| F–I | NF Unit, ST, ANT, IPI | Fixo (XML) |
+| J–L | Frete, Despesa, Cred. ICMS | **Fórmula** |
+| M–N | Custo Entrada, Custo Real | **Fórmula** |
+| O | CST | Fixo (XML) |
+| P–S | Federal, Cartão, ICMS Saída, Custo Saída | **Fórmula** |
+| T | Meta % | **Editável** (padrão 15%, por produto) |
+| U | Preço Mín. Viável | **Fórmula** |
+| V | Preço Atual (sistema × emb.) | Fixo (CSV) |
+| W | Preço Varejo | **Fórmula** |
+| X | Margem Real | **Fórmula** |
+| Y–Z | P.Unit Sistema, Qtd Emb. | Auditoria (cinza) |
 
-* **Bordas:** Todas as células possuem bordas finas pretas para melhor legibilidade.
-* **Formatação Numérica:** Colunas de Margem Varejo e Margem Atacado são formatadas nativamente como porcentagem (`%`).
-* **Destaque por Cores:**
-* **Azul:** Colunas de Produto, Preço e Margem de Varejo.
-* **Amarelo:** Colunas de Produto, Desconto e Margem de Atacado.
-* **Cor de Pele (Pêssego):** Linhas completas de produtos identificados com Substituição Tributária (ST > 0).
+### Cores
+- 🔵 **Azul:** Preço Varejo e Margem Real
+- 🟡 **Amarelo:** Preço Mínimo Viável
+- 🟢 **Verde:** Coluna META % (editável por produto)
+- 🍑 **Pêssego:** Linhas com ST > 0
+- ⚫ **Cinza:** Colunas de auditoria (P.Unit Sistema / Qtd Emb.)
 
+### Comportamento das Fórmulas
+Todos os campos calculados são gravados como **fórmulas Excel reais** — alterar qualquer parâmetro na linha 2 recalcula toda a planilha automaticamente. O arquivo é gerado com `fullCalcOnLoad=True` para garantir recálculo imediato ao abrir no Mac.
 
+---
+
+## 📊 Dashboard
+
+Após processar, um painel é exibido abaixo da tabela com:
+- Total de itens, quantos com ST e sem ST
+- Produtos sem preço no sistema (usarão preço calculado)
+- Valor total da NF
+- Margem estimada média
+- Barra de distribuição ST vs. Sem ST
+- Lista de alertas de produtos sem preço
+
+---
 
 ## 📂 Estrutura do Projeto
 
-```text
+```
 ph-SheetGenerator/
-├── app.py              # Ponto de entrada e servidor Flask
+├── app.py                  # Servidor Flask (porta 8080)
 ├── core/
 │   ├── __init__.py
-│   └── processador.py  # Motor de cálculo e estilização Excel
+│   └── processador.py      # Motor de cálculo, geração Excel e dashboard HTML
 ├── static/
-│   └── logo.png        # Logo da aplicação
+│   └── logo.png
 └── templates/
-    └── index.html      # Interface web (Frontend)
-
-```
-
----
-Para transformar sua aplicação Flask em um executável (.exe para Windows ou .app para Mac) de forma que o usuário precise apenas dar um duplo clique, utilizaremos o **PyInstaller**. Como você é desenvolvedor Fullstack, o processo será simples, mas exige um ajuste técnico no seu `app.py` para que ele encontre as pastas de HTML e CSS dentro do arquivo compactado.
-
-### 1. Ajuste Necessário no `app.py`
-
-Quando o PyInstaller cria um executável, ele descompacta os arquivos em uma pasta temporária. Você precisa avisar o Flask onde encontrar essa pasta. Altere o início do seu `app.py`:
-
-```python
-import sys
-import os
-
-# Determina o caminho base (se está rodando como script ou executável)
-if getattr(sys, 'frozen', False):
-    template_folder = os.path.join(sys._MEIPASS, 'templates')
-    static_folder = os.path.join(sys._MEIPASS, 'static')
-    app = Flask(__name__, template_folder=template_folder, static_folder=static_folder)
-else:
-    app = Flask(__name__)
-
+    └── index.html          # Interface web
 ```
 
 ---
 
-### 2. Fluxo de Instalação na Máquina do Usuário
+## 📦 Gerar Executável
 
-Como você pretende baixar do GitHub e gerar o executável na máquina dele, siga este roteiro:
-
-#### Passo A: Preparação (Windows)
-
-1. Instale o **Python 3.12** (ou a versão estável que você preferir) no computador do usuário. Marque a opção "Add Python to PATH".
-2. Abra o Terminal (PowerShell ou CMD) na pasta onde deseja colocar o projeto.
-
-#### Passo B: Clonagem e Dependências
-
-```powershell
-# Baixe o código
-git clone https://github.com/seu-usuario/ph-SheetGenerator.git
-cd ph-SheetGenerator
-
-# Crie o ambiente e instale tudo
-python -m venv venv
-.\venv\Scripts\activate
-pip install Flask pandas openpyxl pyinstaller
-
-```
-
-#### Passo C: Gerar o Executável
-
-Execute o comando abaixo. Note que no Windows usamos `;` para separar os caminhos, e no Mac usamos `:`.
-
-**Comando para Windows:**
-
-```powershell
-pyinstaller --noconfirm --onefile --windowed --add-data "templates;templates" --add-data "static;static" --icon "static/logo.png" app.py
-
-```
-
-* `--onefile`: Cria um único arquivo .exe (mais fácil para o usuário).
-* `--windowed`: Impede que uma tela preta de terminal abra junto com o programa.
-* `--add-data`: Inclui suas pastas de HTML/Imagens dentro do executável.
-
----
-
-
-### 2. Comando para Gerar o App (`.app`)
-
-Execute o comando abaixo na raiz do projeto. Este comando cria um bundle de aplicativo do macOS que pode ser movido para a pasta /Applications.
+### macOS (.app)
 
 ```bash
+# Instalar PyInstaller (uma vez)
+pip install pyinstaller
+
+# Gerar o .app
 pyinstaller --noconfirm --onefile --windowed \
     --add-data "templates:templates" \
     --add-data "static:static" \
     --icon "static/logo.png" \
     --name "PrecificadoraDaOnda" \
     app.py
-
 ```
 
-### Detalhes das Flags:
+### Windows (.exe)
 
-* **`--windowed`**: Cria um arquivo `.app`. Sem isso, o Mac trataria apenas como um script de terminal.
-* **`--add-data "templates:templates"`**: Copia a pasta de HTML para dentro do pacote. Note o uso do `:` (padrão Unix/Mac).
-* **`--name`**: Define o nome que aparecerá no Finder.
+```powershell
+pip install pyinstaller
 
+pyinstaller --noconfirm --onefile --windowed `
+    --add-data "templates;templates" `
+    --add-data "static;static" `
+    --icon "static/logo.png" `
+    --name "PrecificadoraDaOnda" `
+    app.py
+```
+
+> **Nota Windows:** use `;` para separar caminhos no `--add-data`. No Mac/Linux use `:`.
+
+O executável gerado estará em `dist/PrecificadoraDaOnda` (Mac) ou `dist/PrecificadoraDaOnda.exe` (Windows).
 
 ---
 
-### 3. Entrega Final ao Usuário
+## 🔄 Como Atualizar
 
-Após o processo terminar, uma pasta chamada `dist` será criada. Dentro dela estará o seu arquivo `app.exe`.
+1. Altere o código e teste localmente
+2. Rode novamente o comando do PyInstaller (sobrescreve o `dist/` automaticamente)
+3. Compacte o `.app` ou `.exe` (`botão direito → Comprimir`)
+4. Envie para os usuários via WhatsApp, Drive ou Slack
+5. O usuário substitui o ícone antigo pelo novo
 
-1. Pegue esse arquivo `app.exe`.
-2. Mova-o para a Área de Trabalho do usuário.
-3. Você pode renomeá-lo para "Precificadora Da Onda".
-4. O usuário não precisa de mais nada (nem de Python instalado após o build) para rodar o programa.
+> O programa não se atualiza pela internet — a distribuição é manual via arquivo compactado.
 
-> **Nota Importante:** Ao rodar pela primeira vez no Windows, o antivírus ou o SmartScreen pode exibir um alerta. Como o executável não possui uma assinatura digital paga, basta o usuário clicar em "Mais informações" e "Executar assim mesmo".
+---
 
-### como Atualizar o App para os Usuários
+## ⚠️ Observações Importantes
 
-Como você transformou a aplicação em um executável local (o arquivo .app ou .exe), ela não se atualiza sozinha pela internet. Ela agora é como um programa normal do computador (tipo o Word ou o Photoshop antigo). O GitHub serve apenas para você versionar o código-fonte, não para entregar o executável aos leigos.
-
-1. Você altera o código: Você melhora algo no código e testa no seu Mac.
-
-2. Gera um novo Build: Você roda aquele comando do PyInstaller novamente (pyinstaller --noconfirm --windowed ... app.py). O PyInstaller vai apagar a versão velha na pasta dist e criar o novo PrecificadoraDaOnda.app atualizado.
-
-3. Distribuição: Você compacta esse novo .app (botão direito -> Comprimir) para virar um arquivo .zip e envia para os seus funcionários (por WhatsApp, Slack, Google Drive, etc.).
-
-4. Instalação no usuário: O funcionário apaga o ícone antigo que ele tinha na Área de Trabalho e substitui pelo ícone novo que você enviou. Pronto.
+- Na primeira execução no **Windows**, o SmartScreen pode exibir alerta. Clique em "Mais informações" → "Executar assim mesmo" (o executável não possui assinatura digital paga).
+- O arquivo `.app` do Mac **não funciona no Windows** e vice-versa — gere um build separado para cada sistema.
+- A consulta à API da SEFAZ AL tem timeout de 10 segundos. Se indisponível, o processamento continua normalmente sem os valores de ST externos.

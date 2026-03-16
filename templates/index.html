@@ -46,20 +46,13 @@
             color: #6c757d;
             margin-bottom: 5px;
         }
-        .input-icon-wrapper {
-            position: relative;
-        }
+        .input-icon-wrapper { position: relative; }
         .input-icon-wrapper i {
-            position: absolute;
-            left: 15px;
-            top: 50%;
-            transform: translateY(-50%);
-            color: #adb5bd;
+            position: absolute; left: 15px; top: 50%;
+            transform: translateY(-50%); color: #adb5bd;
         }
-        .input-icon-wrapper input {
-            padding-left: 40px;
-        }
-        /* Drop Zones */
+        .input-icon-wrapper input { padding-left: 40px; }
+
         .drop-zone {
             border: 2px dashed #ced4da;
             border-radius: 12px;
@@ -74,22 +67,15 @@
             background: #f8faff;
         }
         .drop-zone .icon-circle {
-            width: 50px;
-            height: 50px;
-            border-radius: 50%;
-            display: inline-flex;
-            align-items: center;
-            justify-content: center;
-            margin-bottom: 15px;
-            font-weight: bold;
-            font-size: 0.8rem;
+            width: 50px; height: 50px; border-radius: 50%;
+            display: inline-flex; align-items: center; justify-content: center;
+            margin-bottom: 15px; font-weight: bold; font-size: 0.8rem;
         }
         .xml-icon { background: #e0f2fe; color: #0284c7; }
         .csv-icon { background: #dcfce7; color: #16a34a; }
         .drop-zone-title { font-weight: 700; font-size: 1rem; margin-bottom: 5px; }
         .drop-zone-sub { font-size: 0.8rem; color: #adb5bd; }
 
-        /* Container Variáveis */
         .variables-container {
             border: 1px solid #f1f3f5;
             border-radius: 12px;
@@ -97,73 +83,56 @@
             background: #fff;
         }
         .input-group-text {
-            background: transparent;
-            border-left: none;
-            color: #adb5bd;
-            font-size: 0.9rem;
+            background: transparent; border-left: none;
+            color: #adb5bd; font-size: 0.9rem;
         }
-        .input-group input {
-            border-right: none;
-        }
+        .input-group input { border-right: none; }
 
-        /* Botões */
         .btn-primary-custom {
-            background-color: #3b82f6;
-            border: none;
-            border-radius: 30px;
-            padding: 12px 30px;
-            font-weight: 600;
-            transition: all 0.3s ease;
+            background-color: #3b82f6; border: none;
+            border-radius: 30px; padding: 12px 30px;
+            font-weight: 600; transition: all 0.3s ease;
             box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
         }
         .btn-primary-custom:hover {
-            background-color: #2563eb;
-            transform: translateY(-2px);
+            background-color: #2563eb; transform: translateY(-2px);
         }
 
-        /* Tabela Preview */
         .table-responsive {
-            max-height: 400px;
-            border-radius: 10px;
+            max-height: 400px; border-radius: 10px;
             border: 1px solid #dee2e6;
         }
         .table thead th {
-            position: sticky;
-            top: 0;
-            background: #f8f9fa;
-            font-size: 0.8rem;
-            text-transform: uppercase;
-            color: #495057;
-            z-index: 1;
+            position: sticky; top: 0; background: #f8f9fa;
+            font-size: 0.8rem; text-transform: uppercase;
+            color: #495057; z-index: 1;
         }
-        .table tbody td {
-            font-size: 0.85rem;
+        .table tbody td { font-size: 0.85rem; }
+
+        .bg-azul    { background-color: #BDD7EE !important; }
+        .bg-amarelo { background-color: #FFF2CC !important; }
+        .table-st td { background-color: #FCE4D6 !important; }
+
+        .table-container {
+            overflow: auto; max-height: 500px;
+            border: 1px solid #dee2e6; background: white;
         }
-        /* Cores do Preview */
-.bg-azul { background-color: #BDD7EE !important; }
-.bg-amarelo { background-color: #FFF2CC !important; }
-.table-st td { background-color: #FCE4D6 !important; }
+        .table-container::-webkit-scrollbar { width: 12px; height: 12px; }
+        .table-container::-webkit-scrollbar-track { background: #f1f1f1; }
+        .table-container::-webkit-scrollbar-thumb {
+            background: #888; border-radius: 10px;
+            border: 3px solid #f1f1f1;
+        }
+        #tabela-conteudo table { min-width: 2800px; white-space: nowrap; }
 
-/* Barra de Rolagem Visível e Estilizada (Padrão Windows) */
-.table-container {
-    overflow: auto;
-    max-height: 500px;
-    border: 1px solid #dee2e6;
-    background: white;
-}
-.table-container::-webkit-scrollbar { width: 12px; height: 12px; }
-.table-container::-webkit-scrollbar-track { background: #f1f1f1; }
-.table-container::-webkit-scrollbar-thumb {
-    background: #888;
-    border-radius: 10px;
-    border: 3px solid #f1f1f1;
-}
-
-/* Impede que a tabela esprema as colunas */
-#tabela-conteudo table {
-    min-width: 2800px;
-    white-space: nowrap;
-}
+        /* Dashboard */
+        #dashboard-container {
+            animation: fadeIn 0.4s ease;
+        }
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(10px); }
+            to   { opacity: 1; transform: translateY(0); }
+        }
     </style>
 </head>
 <body>
@@ -173,6 +142,14 @@
         <img src="{{ url_for('static', filename='logo.png') }}" alt="Logo" width="60" class="mb-3">
         <h2 class="font-weight-bold" style="color: #1e293b;">Gerador de Precificação Inteligente</h2>
         <p class="text-muted" style="font-size: 0.9rem;">Preencha os dados abaixo para gerar sua planilha automaticamente.</p>
+        <button type="button" onclick="document.getElementById('modal-regras').style.display='flex'"
+                style="background:none;border:1px solid #cbd5e1;border-radius:20px;padding:6px 16px;
+                       font-size:0.78rem;font-weight:600;color:#64748b;cursor:pointer;
+                       display:inline-flex;align-items:center;gap:6px;transition:all .2s"
+                onmouseover="this.style.borderColor='#3b82f6';this.style.color='#3b82f6'"
+                onmouseout="this.style.borderColor='#cbd5e1';this.style.color='#64748b'">
+            <i class="bi bi-journal-text"></i> Regras do Sistema
+        </button>
     </div>
 
     <form id="appForm">
@@ -233,7 +210,6 @@
                         <span class="input-group-text">%</span>
                     </div>
                 </div>
-
                 <div class="col-md-4">
                     <label>Frete / Logística</label>
                     <div class="input-group">
@@ -255,7 +231,6 @@
                         <span class="input-group-text">%</span>
                     </div>
                 </div>
-
                 <div class="col-md-4">
                     <label>ICMS Venda</label>
                     <div class="input-group">
@@ -288,78 +263,585 @@
 
         <div id="alert-box" class="alert mt-4 d-none" role="alert"></div>
 
+        <!-- Seção de resultado: tabela + dashboard -->
         <div id="preview-section" class="mt-4 d-none">
-            <div class="section-title text-start mb-2">PRÉVIA DOS DADOS</div>
-            <div class="table-responsive mb-4" id="table-container"></div>
 
-            <div class="text-center">
+            <!-- Cabeçalho do resultado -->
+            <div class="d-flex align-items-center justify-content-between mb-2">
+                <div class="section-title mb-0 text-start">PRÉVIA DOS DADOS</div>
+                <span id="total-itens-badge" class="badge bg-secondary" style="font-size:0.8rem"></span>
+            </div>
+
+            <!-- Legenda de cores -->
+            <div class="d-flex gap-3 mb-2" style="font-size:0.78rem;flex-wrap:wrap">
+                <span><span style="display:inline-block;width:12px;height:12px;background:#FCE4D6;border:1px solid #ccc;border-radius:2px;margin-right:4px;vertical-align:middle"></span>ST (Substituição Tributária)</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#D1FAE5;border:1px solid #ccc;border-radius:2px;margin-right:4px;vertical-align:middle"></span>ANT (Antecipação)</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#BDD7EE;border:1px solid #ccc;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Preço Varejo / Margem</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#FFF2CC;border:1px solid #ccc;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Preço Mínimo Viável / Preço ATC / Margem ATC</span>
+                <span><span style="display:inline-block;width:12px;height:12px;background:#F3E8FF;border:1px solid #ccc;border-radius:2px;margin-right:4px;vertical-align:middle"></span>Faixa Atacado (roxo suave)</span>
+            </div>
+
+            <!-- Tabela -->
+            <div class="table-container mb-3" id="table-container"></div>
+
+            <!-- Dashboard (injetado pelo JS) -->
+            <div id="dashboard-container"></div>
+
+            <!-- Botão download -->
+            <div class="text-center mt-4">
                 <a id="btn-download" href="#" class="btn btn-success btn-primary-custom" style="background-color: #16a34a;">
-                    <i class="bi bi-download me-2"></i> Confirmar e Baixar excel
+                    <i class="bi bi-download me-2"></i> Confirmar e Baixar Excel
                 </a>
             </div>
+
         </div>
     </form>
 </div>
 
+<!-- ══════════════════════════════════════════════════════════════════════════
+     MODAL — REGRAS DO SISTEMA
+     ══════════════════════════════════════════════════════════════════════════ -->
+<div id="modal-regras"
+     style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);
+            z-index:9999;align-items:flex-start;justify-content:center;padding:24px 16px;
+            overflow-y:auto"
+     onclick="if(event.target===this)this.style.display='none'">
+
+  <div style="background:#fff;border-radius:16px;width:100%;max-width:860px;
+              box-shadow:0 20px 60px rgba(0,0,0,.2);display:flex;flex-direction:column;
+              max-height:calc(100vh - 48px);overflow:hidden">
+
+    <!-- Cabeçalho do modal -->
+    <div style="padding:20px 28px;border-bottom:1px solid #e2e8f0;
+                display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <h4 style="margin:0;font-size:1.1rem;color:#1e293b;font-weight:700">
+          <i class="bi bi-journal-text" style="color:#3b82f6;margin-right:8px"></i>
+          Regras do Sistema
+        </h4>
+        <p style="margin:4px 0 0;font-size:0.78rem;color:#94a3b8">
+          Como a precificadora calcula cada valor — clique em uma seção para navegar diretamente
+        </p>
+      </div>
+      <button onclick="document.getElementById('modal-regras').style.display='none'"
+              style="background:none;border:none;font-size:1.4rem;color:#94a3b8;
+                     cursor:pointer;padding:4px 8px;border-radius:8px;line-height:1"
+              onmouseover="this.style.background='#f1f5f9'"
+              onmouseout="this.style.background='none'">×</button>
+    </div>
+
+    <!-- Corpo: TOC + Conteúdo -->
+    <div style="display:flex;flex:1;overflow:hidden">
+
+      <!-- Sumário lateral -->
+      <nav id="regras-toc"
+           style="width:220px;min-width:220px;background:#f8fafc;border-right:1px solid #e2e8f0;
+                  padding:20px 0;overflow-y:auto;flex-shrink:0">
+        <div style="font-size:0.68rem;font-weight:700;color:#94a3b8;text-transform:uppercase;
+                    letter-spacing:1px;padding:0 16px 8px">Ir para</div>
+        <a href="#" onclick="regraScroll('r-tipos');return false"    class="toc-link">1. Tipos de Tributação</a>
+        <a href="#" onclick="regraScroll('r-classif');return false"  class="toc-link">2. Como Identificar o Regime</a>
+        <a href="#" onclick="regraScroll('r-cred');return false"     class="toc-link">3. Crédito de ICMS</a>
+        <a href="#" onclick="regraScroll('r-calculo');return false"  class="toc-link">4. Fluxo de Cálculo — Varejo</a>
+        <a href="#" onclick="regraScroll('r-atacado');return false"  class="toc-link">5. Fluxo de Cálculo — Atacado</a>
+        <a href="#" onclick="regraScroll('r-preco');return false"    class="toc-link">6. Busca de Preço (Fallback)</a>
+        <a href="#" onclick="regraScroll('r-sefaz');return false"    class="toc-link">7. API SEFAZ AL</a>
+        <a href="#" onclick="regraScroll('r-emb');return false"      class="toc-link">8. Detecção de Embalagem</a>
+        <a href="#" onclick="regraScroll('r-cores');return false"    class="toc-link">9. Cores e Legendas</a>
+        <a href="#" onclick="regraScroll('r-colunas');return false"  class="toc-link">10. Colunas da Planilha</a>
+        <a href="#" onclick="regraScroll('r-inv');return false"      class="toc-link">11. Regras Invariantes</a>
+      </nav>
+
+      <!-- Conteúdo -->
+      <div id="regras-body"
+           style="flex:1;overflow-y:auto;padding:28px 32px;font-size:0.875rem;color:#334155;
+                  line-height:1.7">
+
+        <!-- ── 1. Tipos de Tributação ──────────────────────────────────────── -->
+        <section id="r-tipos">
+          <h5 class="r-titulo">1. Tipos de Tributação de ICMS</h5>
+          <p>Cada produto em uma NF-e pode ter um regime tributário diferente. O sistema identifica automaticamente o regime de cada item:</p>
+          <table class="r-table">
+            <thead><tr><th>Regime</th><th>CST Típico</th><th>O que significa</th></tr></thead>
+            <tbody>
+              <tr><td><span class="badge-regime" style="background:#BDD7EE;color:#1a5276">Normal</span></td><td>00</td><td>Tributação padrão. Cada elo da cadeia paga seu próprio ICMS na venda.</td></tr>
+              <tr><td><span class="badge-regime" style="background:#FCE4D6;color:#784212">ST</span></td><td>10 / 60</td><td>Substituição Tributária — a indústria ou importador já recolheu o ICMS de toda a cadeia com base em um preço presumido.</td></tr>
+              <tr><td><span class="badge-regime" style="background:#FFF3CD;color:#7d6608">ANT</span></td><td>—</td><td>Antecipação Tributária — ocorre quando não há acordo de ST com o estado de origem. O destinatário (você) recolhe ao receber a mercadoria.</td></tr>
+              <tr><td><span class="badge-regime" style="background:#e2e8f0;color:#475569">Isento</span></td><td>40 / 41</td><td>Produto isento de ICMS. Nenhum imposto é devido na cadeia.</td></tr>
+              <tr><td><span class="badge-regime" style="background:#e2e8f0;color:#475569">Simples</span></td><td>102 / 500</td><td>Fornecedor no Simples Nacional — regime simplificado sem transferência de crédito de ICMS.</td></tr>
+            </tbody>
+          </table>
+          <div class="r-info">O regime é identificado pelo campo <strong>CST</strong> no XML da NFe, combinado com os valores retornados pela API SEFAZ AL.</div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 2. Classificação ───────────────────────────────────────────── -->
+        <section id="r-classif">
+          <h5 class="r-titulo">2. Como o Sistema Identifica o Regime de Cada Produto</h5>
+          <p>A classificação segue esta ordem de prioridade:</p>
+          <ol class="r-steps">
+            <li><strong>ST</strong> — se <code>ST unitário &gt; R$ 0,005</code> (valor vindo do XML campo <em>vICMSST</em> + API SEFAZ)</li>
+            <li><strong>ANT</strong> — se <code>ANT unitário &gt; R$ 0,005</code> e ST = 0 (valor exclusivo da API SEFAZ, tipo <em>'ANT'</em>)</li>
+            <li><strong>Isento</strong> — se CST for 40, 41, 50, 60, 102 ou 500</li>
+            <li><strong>Normal</strong> — qualquer produto que não se enquadre nos anteriores</li>
+          </ol>
+          <div class="r-warn">
+            <i class="bi bi-exclamation-triangle-fill"></i>
+            <span><strong>Threshold de segurança:</strong> O sistema usa <code>&gt; 0,005</code> (e não <code>&gt; 0</code>) como mínimo para evitar falsos positivos causados por arredondamento de ponto flutuante. Valores como <em>4.5e-13</em> retornados pela API não ativam o regime ST/ANT.</span>
+          </div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 3. Crédito de ICMS ─────────────────────────────────────────── -->
+        <section id="r-cred">
+          <h5 class="r-titulo">3. Crédito de ICMS — Quando se Aplica</h5>
+          <p>O crédito de ICMS é o valor que você pode abater do ICMS que vai pagar na venda. O ICMS é não-cumulativo: você desconta o que pagou na compra do que deve na venda.</p>
+
+          <h6 class="r-subtitulo">Quando o crédito é ZERO</h6>
+          <table class="r-table">
+            <thead><tr><th>Condição</th><th>Motivo</th></tr></thead>
+            <tbody>
+              <tr><td>Produto com <strong>ST &gt; 0</strong></td><td>O ICMS já foi pago por toda a cadeia pelo substituto. Sua venda sai sem débito de ICMS — então não há crédito a abater.</td></tr>
+              <tr><td>CST <strong>40, 41, 50</strong> (isento/suspenso)</td><td>Sem débito na saída → sem crédito na entrada.</td></tr>
+              <tr><td>CST <strong>60</strong> (ST anterior)</td><td>Mesmo caso de ST acima.</td></tr>
+              <tr><td>CST <strong>102 / 500</strong> (Simples Nacional)</td><td>Regime simplificado — o fornecedor não transfere crédito de ICMS.</td></tr>
+            </tbody>
+          </table>
+
+          <h6 class="r-subtitulo">Quando o crédito É MANTIDO</h6>
+          <table class="r-table">
+            <thead><tr><th>Condição</th><th>Motivo</th></tr></thead>
+            <tbody>
+              <tr><td>Produto com <strong>ANT &gt; 0</strong> (antecipação padrão)</td><td><strong>ANT padrão NÃO elimina o crédito.</strong> Conforme SEFAZ AL e Lei 6.474/2004: <em>"A antecipação não encerra a fase de tributação."</em> Você continua no débito/crédito normal.</td></tr>
+              <tr><td>CST <strong>00</strong> (normal)</td><td>Tributação padrão — crédito integral do ICMS destacado na NF.</td></tr>
+              <tr><td>CST <strong>10</strong></td><td>Tributado com ST nas etapas seguintes — o fornecedor ainda destaca ICMS, gerando seu crédito.</td></tr>
+            </tbody>
+          </table>
+
+          <div class="r-info">
+            <strong>Exceção — ANT com encerramento:</strong> Alguns produtos específicos têm ANT com encerramento de tributação (ex: calçados em AL — Art. 591-H do RICMS/AL). Nesse caso, funciona como ST e elimina o crédito. O sistema <em>não distingue</em> automaticamente esse caso — se você trabalha com esses produtos, o crédito deve ser zerado manualmente (setar Crédito ICMS = 0% no formulário).
+          </div>
+
+          <h6 class="r-subtitulo">Percentual do Crédito por Origem</h6>
+          <table class="r-table">
+            <thead><tr><th>Origem do produto</th><th>Crédito</th></tr></thead>
+            <tbody>
+              <tr><td>Importado / conteúdo importado ≥ 40%</td><td><strong>4%</strong> (padrão configurado no sistema)</td></tr>
+              <tr><td>SP (São Paulo)</td><td>7%</td></tr>
+              <tr><td>PE (Pernambuco)</td><td>12%</td></tr>
+              <tr><td>AL (local)</td><td>19%</td></tr>
+            </tbody>
+          </table>
+          <p>O percentual é configurável no campo <strong>"Crédito ICMS"</strong> do formulário — ajuste conforme a origem do fornecedor da nota.</p>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 4. Fluxo de Cálculo Varejo ─────────────────────────────────── -->
+        <section id="r-calculo">
+          <h5 class="r-titulo">4. Fluxo de Cálculo — Varejo (ordem obrigatória)</h5>
+          <p>Os passos abaixo são executados nesta sequência exata. Alterar a ordem muda o resultado.</p>
+
+          <div class="r-flow">
+            <div class="r-step"><span class="r-num">1</span><div><strong>Custo Real</strong> = NF Unitário × Multiplicador Varejo<br><span class="r-ex">Ex: R$ 7,69 × 2,0 = R$ 15,38</span></div></div>
+            <div class="r-step"><span class="r-num">2</span><div><strong>Frete</strong> = Custo Real × % Frete<br><span class="r-ex">Ex: R$ 15,38 × 10% = R$ 1,54</span></div></div>
+            <div class="r-step"><span class="r-num">3</span><div><strong>Despesa Operacional</strong> = Custo Real × % Despesa<br><span class="r-ex">Ex: R$ 15,38 × 10% = R$ 1,54</span></div></div>
+            <div class="r-step"><span class="r-num">4</span><div><strong>Crédito ICMS</strong> = NF Unitário × % Crédito (ou 0 se ST/Isento)<br><span class="r-ex">Ex: R$ 7,69 × 4% = R$ 0,31 — será subtraído do custo</span></div></div>
+            <div class="r-step"><span class="r-num">5</span><div><strong>Custo de Entrada</strong> = Custo Real + ST + ANT + IPI + Frete + Despesa − Crédito ICMS<br><span class="r-ex">Todos os custos da compra, menos o crédito fiscal</span></div></div>
+            <div class="r-step"><span class="r-num">6</span><div><strong>Preço Varejo</strong> = Preço Atual do sistema (se &gt; 0), senão Arredondar99(Custo Real × 2)<br><span class="r-ex">Usa o preço cadastrado no CSV. Se não houver, calcula automaticamente com margem embutida</span></div></div>
+            <div class="r-step"><span class="r-num">7</span><div><strong>Federal</strong> = Preço Varejo × % Imposto Federal (ex: 9,13%)</div></div>
+            <div class="r-step"><span class="r-num">8</span><div><strong>Cartão</strong> = Preço Varejo × % Taxa Cartão (ex: 4%)</div></div>
+            <div class="r-step"><span class="r-num">9</span><div><strong>ICMS Saída</strong> = Preço Varejo × % ICMS Venda (ex: 20%)</div></div>
+            <div class="r-step"><span class="r-num">10</span><div><strong>Custo de Saída</strong> = Custo de Entrada + Federal + Cartão + ICMS Saída<br><span class="r-ex">Tudo que você paga para comprar + tudo que paga para vender</span></div></div>
+            <div class="r-step"><span class="r-num">11</span><div><strong>Meta %</strong> = 15% padrão — editável por produto na planilha</div></div>
+            <div class="r-step"><span class="r-num">12</span><div><strong>Preço Mínimo Viável</strong> = Custo de Saída ÷ (1 − Meta%)<br><span class="r-ex">Menor preço que ainda atinge a margem mínima</span></div></div>
+            <div class="r-step"><span class="r-num">13</span><div><strong>Margem Real</strong> = (Preço Varejo − Custo de Saída) ÷ Preço Varejo<br><span class="r-ex">Percentual de lucro real sobre o preço de venda</span></div></div>
+          </div>
+
+          <div class="r-info">
+            <strong>Arredondar99:</strong> Função aplicada quando não há preço no sistema. Arredonda para o centavo .99 mais próximo abaixo do valor dobrado do custo.
+            <br>Ex: custo R$ 10,00 → dobro R$ 20,00 → Arredondar99 → R$ 19,99
+          </div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 5. Fluxo Atacado ───────────────────────────────────────────── -->
+        <section id="r-atacado">
+          <h5 class="r-titulo">5. Fluxo de Cálculo — Atacado</h5>
+          <p>O atacado usa os mesmos dados de entrada mas com parâmetros próprios. O <strong>Custo de Entrada é compartilhado</strong> com o varejo — a diferença está nos tributos de saída e no preço de venda.</p>
+
+          <div class="r-flow">
+            <div class="r-step"><span class="r-num">14</span><div><strong>NF ATC</strong> = NF Unitário × Multiplicador Atacado<br><span class="r-ex">Ex: R$ 7,69 × 1,3 = R$ 9,99 (multiplicador menor que varejo)</span></div></div>
+            <div class="r-step"><span class="r-num">15</span><div><strong>Preço ATC</strong> = Preço Varejo × (1 − Desconto Atacado)<br><span class="r-ex">Ex: R$ 19,99 × (1 − 15%) = R$ 16,99</span></div></div>
+            <div class="r-step"><span class="r-num">16</span><div><strong>Federal ATC</strong> = NF ATC × % Federal<br><span class="r-ex">Base: custo atacado (diferente do varejo que usa preço de venda)</span></div></div>
+            <div class="r-step"><span class="r-num">17</span><div><strong>Cartão ATC</strong> = Preço ATC × % Cartão</div></div>
+            <div class="r-step"><span class="r-num">18</span><div><strong>ICMS ATC</strong> = NF ATC × % ICMS Venda</div></div>
+            <div class="r-step"><span class="r-num">19</span><div><strong>Custo Saída ATC</strong> = Custo de Entrada + Federal ATC + Cartão ATC + ICMS ATC<br><span class="r-ex">Usa o mesmo Custo de Entrada do varejo (passo 5)</span></div></div>
+            <div class="r-step"><span class="r-num">20</span><div><strong>Margem ATC</strong> = (Preço ATC − Custo Saída ATC) ÷ Preço ATC</div></div>
+          </div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 6. Busca de Preço ──────────────────────────────────────────── -->
+        <section id="r-preco">
+          <h5 class="r-titulo">6. Busca de Preço no Sistema (Fallback)</h5>
+          <p>O sistema tenta encontrar o preço do produto no CSV em três tentativas:</p>
+          <ol class="r-steps">
+            <li><strong>Tentativa 1 — EAN (código de barras):</strong> Cruza o campo <em>cEAN</em> do XML com a coluna <em>BARRA</em> do CSV. Se encontrar preço &gt; R$ 0,01, usa esse valor.</li>
+            <li><strong>Tentativa 2 — Referência:</strong> Se o preço não foi encontrado pelo EAN (ou era R$ 0,01), tenta pelo código interno do produto (<em>cProd</em> no XML × <em>REFERÊNCIA</em> no CSV).</li>
+            <li><strong>Tentativa 3 — Sem preço:</strong> Se nenhuma das tentativas funcionar, o produto fica como "Sem Preço" e o <strong>Preço Varejo é calculado automaticamente</strong> via Arredondar99(Custo Real × 2). Esses produtos são listados nos alertas do dashboard.</li>
+          </ol>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 7. API SEFAZ ───────────────────────────────────────────────── -->
+        <section id="r-sefaz">
+          <h5 class="r-titulo">7. Consulta à API SEFAZ AL</h5>
+          <p>O sistema consulta automaticamente a API da SEFAZ Alagoas para obter os valores de ST e ANT de cada produto da nota. Isso é feito pela chave da NFe (44 dígitos).</p>
+          <table class="r-table">
+            <thead><tr><th>Campo retornado</th><th>Uso</th></tr></thead>
+            <tbody>
+              <tr><td><code>tipoImposto = 'ST'</code></td><td>Somado ao valor ST do próprio XML (vICMSST)</td></tr>
+              <tr><td><code>tipoImposto = 'ANT'</code></td><td>Usado como ANT unitário — não existe campo ANT no XML</td></tr>
+              <tr><td><code>valorIcmsCalculado + valorFecoepCalculado</code></td><td>Valor total por item (ICMS + Fundo de Combate à Pobreza)</td></tr>
+            </tbody>
+          </table>
+          <div class="r-warn">
+            <i class="bi bi-wifi-off"></i>
+            <span>A API tem timeout de 10 segundos. Se estiver fora do ar, o processamento <strong>continua normalmente</strong> usando apenas os dados do XML. Os valores de ANT e ST externo ficam zerados — verifique os valores se a API falhou.</span>
+          </div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 8. Embalagem ───────────────────────────────────────────────── -->
+        <section id="r-emb">
+          <h5 class="r-titulo">8. Detecção de Embalagem</h5>
+          <p>Se a descrição do produto no XML indicar uma embalagem (ex: "GRAMPO CAIXA COM 24"), o sistema multiplica o preço unitário do sistema pela quantidade da embalagem para calcular o preço correto.</p>
+          <p><strong>Padrões reconhecidos:</strong> <em>CAIXA COM N, PACOTE COM N, KIT COM N, PCT C/N, CX C/N, C/N</em></p>
+          <div class="r-info">
+            <strong>Proteção anti-absurdo:</strong> Se o resultado da multiplicação for mais de 3× o custo esperado, o sistema assume que o cadastro já tem o preço da caixa completa e <em>não</em> multiplica. Isso evita erros com produtos como grampos com 5000 unidades.
+          </div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 9. Cores ───────────────────────────────────────────────────── -->
+        <section id="r-cores">
+          <h5 class="r-titulo">9. Cores e Legendas</h5>
+          <h6 class="r-subtitulo">Cores de Linha (por regime tributário)</h6>
+          <table class="r-table">
+            <thead><tr><th>Cor</th><th>Significado</th></tr></thead>
+            <tbody>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#FCE4D6;border-radius:4px;vertical-align:middle"></span></td><td><strong>Pêssego</strong> — produto com Substituição Tributária (ST &gt; 0)</td></tr>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#D1FAE5;border-radius:4px;vertical-align:middle"></span></td><td><strong>Verde menta</strong> — produto com Antecipação Tributária (ANT &gt; 0, sem ST)</td></tr>
+              <tr><td style="vertical-align:middle"><em>sem cor</em></td><td>Produto em tributação normal</td></tr>
+            </tbody>
+          </table>
+          <h6 class="r-subtitulo">Cores de Coluna (apenas em linhas normais)</h6>
+          <p style="font-size:0.8rem;color:#64748b;margin-bottom:8px">A prévia tem cabeçalho duplo — "VAREJO" (azul) e "ATACADO" (roxo). Para linhas ANT, as cores de preço (azul/amarelo) prevalecem sobre o verde da linha.</p>
+          <table class="r-table">
+            <thead><tr><th>Cor</th><th>Onde aparece</th></tr></thead>
+            <tbody>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#BDD7EE;border-radius:4px;vertical-align:middle"></span></td><td><strong>Azul</strong> — Preço Varejo e Margem Real</td></tr>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#FFF2CC;border-radius:4px;vertical-align:middle"></span></td><td><strong>Amarelo forte</strong> — Preço Mínimo Viável, Preço ATC e Margem ATC</td></tr>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#F3E8FF;border-radius:4px;vertical-align:middle"></span></td><td><strong>Roxo suave</strong> — Todas as demais colunas da faixa atacado (NF ATC, Federal ATC, Cartão ATC, ICMS ATC, C. Saída ATC)</td></tr>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#E2EFDA;border-radius:4px;vertical-align:middle"></span></td><td><strong>Verde</strong> — META % (editável por produto na planilha Excel)</td></tr>
+              <tr><td><span style="display:inline-block;width:80px;height:20px;background:#D9D9D9;border-radius:4px;vertical-align:middle"></span></td><td><strong>Cinza</strong> — Colunas de auditoria (P.Unit Sistema e Qtd Embalagem)</td></tr>
+            </tbody>
+          </table>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 10. Colunas ───────────────────────────────────────────────── -->
+        <section id="r-colunas">
+          <h5 class="r-titulo">10. Colunas da Planilha e da Prévia</h5>
+
+          <h6 class="r-subtitulo">Prévia (tela) — 31 colunas com cabeçalho duplo</h6>
+          <p style="font-size:0.8rem;color:#64748b">A primeira linha do cabeçalho agrupa em <strong style="color:#1d4ed8">VAREJO</strong> e <strong style="color:#92400e">ATACADO</strong>. A prévia mostra no máximo 20 produtos.</p>
+          <table class="r-table">
+            <thead><tr><th>#</th><th>Nome</th><th>Base de cálculo</th></tr></thead>
+            <tbody>
+              <tr><td style="color:#94a3b8">0–4</td><td>NF, DESCRIÇÃO, REF, SKU, QTD</td><td>Dados fixos do XML</td></tr>
+              <tr><td style="color:#94a3b8">5–8</td><td>NF UNIT, ST UNIT, ANT UNIT, IPI UNIT</td><td>XML + API SEFAZ</td></tr>
+              <tr><td style="color:#94a3b8">9–13</td><td>FRETE, DESPESA, CRED ICMS, C. REAL, C. ENTRADA</td><td>Fórmulas (custo de entrada)</td></tr>
+              <tr><td style="color:#94a3b8">14</td><td>CST</td><td>XML</td></tr>
+              <tr style="background:#dbeafe20"><td style="color:#1d4ed8;font-weight:600">15–18</td><td>FEDERAL, CARTÃO, ICMS S., C. SAÍDA</td><td>Varejo — baseados no Preço Varejo</td></tr>
+              <tr style="background:#dbeafe20"><td style="color:#1d4ed8;font-weight:600">19–20</td><td>META %, <strong>PREÇO MÍN</strong></td><td>Varejo — 15% padrão / C.Saída ÷ (1−meta)</td></tr>
+              <tr style="background:#dbeafe20"><td style="color:#1d4ed8;font-weight:600">21–23</td><td>PREÇO ATUAL, <strong>PREÇO VAREJO</strong>, <strong>MARGEM</strong></td><td>CSV / fórmula — <span style="background:#BDD7EE;padding:1px 5px;border-radius:3px">azul</span> em linhas normais</td></tr>
+              <tr style="background:#F3E8FF"><td style="color:#92400e;font-weight:600">24</td><td>NF ATC</td><td>Atacado — NF Unit × Mult. Atacado</td></tr>
+              <tr style="background:#F3E8FF"><td style="color:#92400e;font-weight:600">25–27</td><td>FEDERAL ATC, CARTÃO ATC, ICMS ATC</td><td>Atacado — Federal/ICMS sobre NF ATC, Cartão sobre Preço ATC</td></tr>
+              <tr style="background:#F3E8FF"><td style="color:#92400e;font-weight:600">28</td><td>C. SAÍDA ATC</td><td>Atacado — C.Entrada + Fed ATC + Cart ATC + ICMS ATC</td></tr>
+              <tr style="background:#FFF2CC"><td style="color:#92400e;font-weight:600">29–30</td><td><strong>PREÇO ATC</strong>, <strong>MARGEM ATC</strong></td><td>Atacado — <span style="background:#FFF2CC;padding:1px 5px;border-radius:3px">amarelo forte</span> em linhas normais</td></tr>
+            </tbody>
+          </table>
+
+          <h6 class="r-subtitulo">Planilha Excel — 33 colunas (A a AG)</h6>
+          <table class="r-table">
+            <thead><tr><th>Col</th><th>Nome</th><th>Origem</th><th>Descrição</th></tr></thead>
+            <tbody>
+              <tr><td>A–E</td><td>NF, DESCRIÇÃO, REF, SKU, QTD</td><td>XML</td><td>Dados fixos</td></tr>
+              <tr><td>F–I</td><td>NF UNIT, ST UNIT, ANT UNIT, IPI UNIT</td><td>XML + API</td><td>Valores unitários da NF</td></tr>
+              <tr class="r-formula"><td>J–M</td><td>CUSTO REAL, FRETE, DESPESA, CRED. ICMS</td><td>Fórmula</td><td>Custo com multiplicador + % sobre custo</td></tr>
+              <tr><td>N</td><td>CST</td><td>XML</td><td>Código de Situação Tributária</td></tr>
+              <tr class="r-formula"><td>O</td><td>CUSTO ENTRADA</td><td>Fórmula</td><td>C.Real + ST + ANT + IPI + Frete + Desp + Cred</td></tr>
+              <tr class="r-formula" style="background:#dbeafe20"><td>P–S</td><td>FEDERAL, CARTÃO, ICMS SAÍDA, CUSTO SAÍDA</td><td>Fórmula</td><td>Varejo — baseados no Preço Varejo</td></tr>
+              <tr style="background:#E2EFDA"><td>T</td><td>META %</td><td>Editável</td><td>Padrão 15% — editável linha a linha</td></tr>
+              <tr class="r-formula" style="background:#dbeafe20"><td>U–X</td><td>PREÇO MÍN, PREÇO ATUAL, PREÇO VAREJO, MARGEM REAL</td><td>Fórmula / CSV</td><td>Preços e margem varejo</td></tr>
+              <tr class="r-formula" style="background:#F3E8FF"><td>Y–AE</td><td>NF ATC, PREÇO ATC, FED ATC, CARTÃO ATC, ICMS ATC, C.SAÍDA ATC, MARGEM ATC</td><td>Fórmula</td><td>Bloco completo atacado</td></tr>
+              <tr style="color:#94a3b8"><td>AF–AG</td><td>P.UNIT SISTEMA, QTD EMB</td><td>Auditoria</td><td>Dados brutos para conferência</td></tr>
+            </tbody>
+          </table>
+          <div class="r-info"><strong>Linha 2 da planilha:</strong> Parâmetros globais editáveis. Alterar qualquer célula recalcula toda a planilha automaticamente (fórmulas reais do Excel — <code>fullCalcOnLoad=True</code>).</div>
+        </section>
+
+        <hr class="r-sep">
+
+        <!-- ── 11. Invariantes ───────────────────────────────────────────── -->
+        <section id="r-inv">
+          <h5 class="r-titulo">11. Regras Invariantes — Nunca Devem Ser Quebradas</h5>
+          <p>Estas são as restrições fundamentais do sistema. Qualquer alteração de regra deve verificar se estas invariantes continuam sendo respeitadas:</p>
+          <ol class="r-steps">
+            <li><strong>ANT não zera o crédito de ICMS</strong> — ANT padrão é diferente de ST. O crédito do ICMS da NF de compra continua existindo normalmente para produtos ANT.</li>
+            <li><strong>Threshold &gt; 0,005 em todas as comparações de imposto</strong> — nunca usar <code>&gt; 0</code> diretamente em valores de ST/ANT.</li>
+            <li><strong>A API SEFAZ nunca pode travar o processamento</strong> — está sempre em try/catch com fallback para zero.</li>
+            <li><strong>Preço Varejo nunca pode ser zero</strong> — se não há preço no sistema, Arredondar99 é aplicado automaticamente.</li>
+            <li><strong>Multiplicador é aplicado ANTES de qualquer percentual</strong> — Custo Real = NF Unit × MULT é sempre o primeiro passo.</li>
+            <li><strong>Crédito ICMS é subtraído</strong> (não somado) no Custo de Entrada — representa benefício fiscal que reduz o custo.</li>
+            <li><strong>Federal e ICMS Saída do varejo incidem sobre o Preço de Venda</strong> — são impostos da venda, não da compra.</li>
+            <li><strong>Federal ATC e ICMS ATC incidem sobre NF ATC</strong> (custo atacado) — base diferente do varejo.</li>
+            <li><strong>O Custo de Entrada é compartilhado entre varejo e atacado</strong> — a entrada é a mesma, só a saída muda.</li>
+            <li><strong>ST = pêssego, ANT = âmbar</strong> — as cores das linhas identificam o regime e nunca devem ser trocadas.</li>
+          </ol>
+        </section>
+
+      </div><!-- /regras-body -->
+    </div><!-- /flex corpo -->
+  </div><!-- /modal box -->
+</div><!-- /modal overlay -->
+
+<style>
+.toc-link {
+    display: block;
+    padding: 7px 16px;
+    font-size: 0.78rem;
+    color: #475569;
+    text-decoration: none;
+    border-left: 3px solid transparent;
+    transition: all .15s;
+    line-height: 1.4;
+}
+.toc-link:hover {
+    background: #e2e8f0;
+    border-left-color: #3b82f6;
+    color: #1e40af;
+}
+.r-titulo {
+    font-size: 1rem;
+    font-weight: 700;
+    color: #1e293b;
+    margin: 0 0 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid #bfdbfe;
+}
+.r-subtitulo {
+    font-size: 0.82rem;
+    font-weight: 700;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: .5px;
+    margin: 16px 0 8px;
+}
+.r-sep { border: none; border-top: 1px solid #f1f5f9; margin: 28px 0; }
+.r-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.82rem;
+    margin-bottom: 12px;
+}
+.r-table th {
+    background: #f8fafc;
+    padding: 8px 12px;
+    text-align: left;
+    font-weight: 600;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+}
+.r-table td {
+    padding: 7px 12px;
+    border-bottom: 1px solid #f1f5f9;
+    vertical-align: top;
+}
+.r-table tr:last-child td { border-bottom: none; }
+.r-formula td:first-child { color: #6366f1; font-weight: 700; }
+.badge-regime {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 12px;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+.r-info {
+    background: #eff6ff;
+    border-left: 3px solid #3b82f6;
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.82rem;
+    color: #1e40af;
+    margin: 12px 0;
+}
+.r-warn {
+    background: #fffbeb;
+    border-left: 3px solid #f59e0b;
+    padding: 10px 14px;
+    border-radius: 0 8px 8px 0;
+    font-size: 0.82rem;
+    color: #92400e;
+    margin: 12px 0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-start;
+}
+.r-warn i { margin-top: 2px; flex-shrink: 0; }
+.r-flow { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+.r-step {
+    display: flex;
+    align-items: flex-start;
+    gap: 12px;
+    background: #f8fafc;
+    border-radius: 8px;
+    padding: 10px 14px;
+}
+.r-num {
+    background: #3b82f6;
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    flex-shrink: 0;
+    margin-top: 1px;
+}
+.r-ex { font-size: 0.78rem; color: #64748b; }
+.r-steps { padding-left: 20px; }
+.r-steps li { margin-bottom: 8px; }
+code {
+    background: #f1f5f9;
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 0.82rem;
+    color: #7c3aed;
+}
+</style>
+
 <script>
-    // Configuração Drag and Drop
+function regraScroll(id) {
+    var el = document.getElementById(id);
+    var body = document.getElementById('regras-body');
+    if (!el || !body) return;
+    var elRect   = el.getBoundingClientRect();
+    var bodyRect = body.getBoundingClientRect();
+    body.scrollTo({ top: body.scrollTop + (elRect.top - bodyRect.top) - 16, behavior: 'smooth' });
+}
+document.addEventListener('keydown', function(e) {
+    if (e.key === 'Escape') {
+        document.getElementById('modal-regras').style.display = 'none';
+    }
+});
+</script>
+
+<script>
+    // ── Drag & Drop ───────────────────────────────────────────────────────────
     function setupZone(type) {
-        const zone = document.getElementById('drop-' + type);
+        const zone  = document.getElementById('drop-' + type);
         const input = document.getElementById('file-' + type);
         const title = document.getElementById('title-' + type);
 
-        zone.ondragover = (e) => { e.preventDefault(); zone.classList.add('dragover'); };
-        zone.ondragleave = () => { zone.classList.remove('dragover'); };
+        zone.ondragover  = (e) => { e.preventDefault(); zone.classList.add('dragover'); };
+        zone.ondragleave = ()  => { zone.classList.remove('dragover'); };
         zone.ondrop = (e) => {
             e.preventDefault(); zone.classList.remove('dragover');
-            if(e.dataTransfer.files.length) {
+            if (e.dataTransfer.files.length) {
                 input.files = e.dataTransfer.files;
                 title.innerHTML = `<i class="bi bi-check-circle-fill text-success"></i> ${input.files[0].name}`;
             }
         };
         input.onchange = () => {
-            if(input.files.length) {
+            if (input.files.length)
                 title.innerHTML = `<i class="bi bi-check-circle-fill text-success"></i> ${input.files[0].name}`;
-            }
         };
     }
     setupZone('xml');
     setupZone('csv');
 
-    // Submissão do Formulário
+    // ── Submissão ─────────────────────────────────────────────────────────────
     document.getElementById('appForm').onsubmit = async (e) => {
         e.preventDefault();
-        const btn = document.getElementById('btn-submit');
-        const alertBox = document.getElementById('alert-box');
+
+        const btn        = document.getElementById('btn-submit');
+        const alertBox   = document.getElementById('alert-box');
         const previewSec = document.getElementById('preview-section');
 
         btn.innerHTML = '<span class="spinner-border spinner-border-sm me-2"></span> Processando...';
-        btn.disabled = true;
+        btn.disabled  = true;
         alertBox.classList.add('d-none');
         previewSec.classList.add('d-none');
 
-        const formData = new FormData(e.target);
-
         try {
-            const res = await fetch('/processar', { method: 'POST', body: formData });
+            const res  = await fetch('/processar', { method: 'POST', body: new FormData(e.target) });
             const data = await res.json();
 
             if (data.sucesso) {
+                // Tabela de prévia
                 document.getElementById('table-container').innerHTML = data.tabela;
+
+                // Badge com total de itens
+                const badge = document.getElementById('total-itens-badge');
+                if (data.total_itens) {
+                    badge.textContent = `${data.total_itens} produto(s) processados`;
+                    badge.style.display = 'inline-block';
+                }
+
+                // Dashboard — innerHTML não executa <script>, então reexecutamos manualmente
+                const dash = document.getElementById('dashboard-container');
+                dash.innerHTML = data.dashboard || '';
+                dash.querySelectorAll('script').forEach(old => {
+                    const s = document.createElement('script');
+                    s.textContent = old.textContent;
+                    document.body.appendChild(s);
+                    old.remove();
+                });
+
+                // Link de download
                 document.getElementById('btn-download').href = data.download_url;
+
+                // Mostrar seção e rolar até ela
                 previewSec.classList.remove('d-none');
+                previewSec.scrollIntoView({ behavior: 'smooth', block: 'start' });
+
             } else {
-                alertBox.className = "alert alert-danger mt-4";
+                alertBox.className = 'alert alert-danger mt-4';
                 alertBox.innerText = data.erro;
                 alertBox.classList.remove('d-none');
             }
+
         } catch (err) {
-            alertBox.className = "alert alert-danger mt-4";
-            alertBox.innerText = "Erro ao se comunicar com o servidor.";
+            alertBox.className = 'alert alert-danger mt-4';
+            alertBox.innerText = 'Erro ao se comunicar com o servidor.';
             alertBox.classList.remove('d-none');
         } finally {
             btn.innerHTML = '<i class="bi bi-rocket-takeoff me-2"></i> Atualizar Prévia';
-            btn.disabled = false;
+            btn.disabled  = false;
         }
     };
 </script>
