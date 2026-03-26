@@ -13,8 +13,25 @@ _PATTERN_EMB_EXPLICITO = re.compile(
     r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+)',
     re.IGNORECASE
 )
+
 # Padrão 2 (Oxford/fornecedores): "12 CANECAS...", "6 TIGELAS..."
-_PATTERN_EMB_INICIO = re.compile(r'^(\d+)\s+\S', re.IGNORECASE)
+# Exclui sufixos de medida para evitar falsos positivos como "2 LITROS", "500 ML", "250 G"
+_PATTERN_EMB_INICIO = re.compile(
+    r'^(\d+)\s+(?!(?:ML|MG|KG|GR|LT|L|CM|MM|M|UN|PC|PCS|PCT|UNID)\b)',
+    re.IGNORECASE
+)
+# Padrão 3 (Summit/papelaria): "PT24UN", "DP 18 UN", "POTE 48 UN", "CX DP 12"
+_PATTERN_EMB_FINAL = re.compile(
+    r'(?:PT|DP|POTE|POLYBAG|DISPLAY)\s*(\d+)\s*(?:UN|U(?:\s|$|\]))?',
+    re.IGNORECASE
+)
+
+# Padrão 4 (Display/DS): "DS NOME DO PRODUTO - 84", "DS NOME - 207 PCS"
+# DS = Display; o número após o traço final é a quantidade da embalagem
+_PATTERN_EMB_DS = re.compile(
+    r'^DS\b.*-\s*(\d+)\s*(?:PCS)?\s*$',
+    re.IGNORECASE
+)
 
 # ─── Mapeamento de colunas (1-based) ─────────────────────────────────────────
 #
@@ -47,9 +64,12 @@ _PATTERN_EMB_INICIO = re.compile(r'^(\d+)\s+\S', re.IGNORECASE)
 # CRED   CST  C_ENT  FED    CART   ICMS_S  C_SAIDA META  P_MIN  P_ATUAL P_VAR  MARGEM
 # 13     14   15     16     17     18      19      20    21     22      23     24
 #
-# Y       Z      AA       AB        AC      AD           AE          AF         AG
-# NF_ATC  P_ATC  FED_ATC  CART_ATC  ICM_ATC C_SAIDA_ATC  MARGEM_ATC  AUDIT_SYS  AUDIT_EMB
-# 25      26     27       28        29      30           31          32         33
+# Y       Z      AA       AB        AC      AD           AE         AF          AG            AH         AI
+# NF_ATC  P_ATC  FED_ATC  CART_ATC  ICM_ATC C_SAIDA_ATC  MARGEM_ATC P_PCT_ATC   P_COMPRA_PCT  AUDIT_SYS  AUDIT_EMB
+# 25      26     27       28        29      30           31         32          33            34         35
+#
+# P_PCT_ATC    = P_ATC × QTD_EMB  → preço de venda do pacote no atacado (com desconto)
+# P_COMPRA_PCT = NF_U  × QTD_EMB  → preço de compra do pacote (custo NF por caixa)
 
 COL = {
     'NF': 1, 'DESC': 2, 'REF': 3, 'SKU': 4, 'QTD': 5,
@@ -62,9 +82,59 @@ COL = {
     'NF_ATC': 25, 'P_ATC': 26,
     'FED_ATC': 27, 'CART_ATC': 28, 'ICM_ATC': 29,
     'C_SAIDA_ATC': 30, 'MARGEM_ATC': 31,
-    'AUDIT_SYS': 32, 'AUDIT_EMB': 33,
+    'P_PCT_ATC': 32,
+    'P_COMPRA_PCT': 33,
+    'AUDIT_SYS': 34, 'AUDIT_EMB': 35,
 }
-TOTAL_COLS = 33
+TOTAL_COLS = 35
+
+# ─── Paleta de cores por % de crédito ICMS ───────────────────────────────────
+# Usada na coluna CRED do Excel e na prévia HTML
+CRED_CORES = {
+    0.04: 'FFB347',  # 4%  — laranja vivo   (importado)
+    0.07: 'DA70D6',  # 7%  — orquídea       (SP)
+    0.12: '40E0D0',  # 12% — turquesa       (PE)
+    0.19: 'FF69B4',  # 19% — rosa pink      (AL)
+    0.0:  'B0B0B0',  # 0%  — cinza          (ST / isento)
+}
+CRED_LABELS = {
+    0.04: '4% — Importado',
+    0.07: '7% — Nacional (SP)',
+    0.12: '12% — Nacional (PE)',
+    0.19: '19% — Local (AL)',
+    0.0:  '0% — ST / Isento',
+}
+
+def cred_fill(pct):
+    """Retorna PatternFill para o percentual de crédito ICMS."""
+    hex_cor = CRED_CORES.get(round(pct, 4), 'FFFFFF')
+    return PatternFill("solid", fgColor=hex_cor)
+
+
+# ─── Descrições dos códigos CST/CSOSN em português ───────────────────────────
+CST_DESCRICOES = {
+    '00':  ('Tributada integralmente',                                          '#E2EFDA'),
+    '10':  ('Tributada + ST nas operações seguintes',                           '#FFF2CC'),
+    '20':  ('Com redução de base de cálculo',                                   '#E2EFDA'),
+    '30':  ('Isenta/não tributada + ST nas operações seguintes',                '#FFF2CC'),
+    '40':  ('Isenta de ICMS',                                                   '#F2F2F2'),
+    '41':  ('Não tributada',                                                    '#F2F2F2'),
+    '50':  ('Suspensão — ICMS suspenso por decisão judicial ou normativa',      '#F2F2F2'),
+    '51':  ('Diferimento — pagamento adiado para etapa seguinte da cadeia',     '#F2F2F2'),
+    '60':  ('Cobrada anteriormente por ST — imposto já retido na entrada',      '#FCE4D6'),
+    '70':  ('Com redução de base de cálculo + ST nas operações seguintes',      '#FFF2CC'),
+    '90':  ('Outras (tributação mista ou não enquadrada nos anteriores)',        '#F2F2F2'),
+    '101': ('Simples Nacional — tributado com permissão de crédito',            '#E2EFDA'),
+    '102': ('Simples Nacional — tributado sem permissão de crédito',            '#F2F2F2'),
+    '103': ('Simples Nacional — isento por faixa de receita bruta',             '#F2F2F2'),
+    '201': ('Simples Nacional — com crédito + ST nas operações seguintes',      '#FFF2CC'),
+    '202': ('Simples Nacional — sem crédito + ST nas operações seguintes',      '#FFF2CC'),
+    '203': ('Simples Nacional — isento por faixa + ST nas operações seguintes', '#FFF2CC'),
+    '300': ('Imune de ICMS',                                                    '#F2F2F2'),
+    '400': ('Não tributada pelo Simples Nacional',                              '#F2F2F2'),
+    '500': ('Simples — ICMS cobrado anteriormente por ST ou antecipação',       '#FCE4D6'),
+    '900': ('Simples Nacional — outros',                                        '#F2F2F2'),
+}
 
 
 # ─── Helpers ─────────────────────────────────────────────────────────────────
@@ -96,19 +166,52 @@ def get_xml_text(node, xpath, ns, default=""):
 
 
 def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult):
+    # Padrão 1 — explícito: "CAIXA COM N", "PCT C/N", "KIT COM N"
     match = _PATTERN_EMB_EXPLICITO.search(desc_xml)
     if match:
         qtd = int(match.group(1))
+        padrao_explicito = True
     else:
+        # Padrão 2 — número no início: "12 CANECAS", "6 TIGELAS"
         match2 = _PATTERN_EMB_INICIO.search(desc_xml)
         if match2:
             qtd = int(match2.group(1))
+            padrao_explicito = False
         else:
-            return 1
+            # Padrão 3 — sufixo explícito: "POTE 48 UN", "PT24UN", "DP 18 UN"
+            match3 = _PATTERN_EMB_FINAL.search(desc_xml)
+            if match3:
+                qtd = int(match3.group(1))
+                padrao_explicito = True
+            else:
+                # Padrão 4 — DS Display: "DS NOME - 84", "DS NOME - 207 PCS"
+                match4 = _PATTERN_EMB_DS.search(desc_xml)
+                if match4:
+                    qtd = int(match4.group(1))
+                    padrao_explicito = True
+                else:
+                    return 1
+
     if qtd <= 1:
         return 1
-    if p_sys > 0 and (p_sys * qtd) > (v_un_xml * mult * 3):
+
+    # Padrão 2 (ambíguo) exige preço real para validar o anti-absurdo.
+    # Padrões 1 e 3 são suficientemente explícitos — não precisam de preço.
+    if not padrao_explicito and p_sys <= 0.02:
         return 1
+
+    # Anti-absurdo #1: preço de sistema × embalagem > NF × mult × 3
+    # Padrões explícitos (DS, CAIXA COM, etc.) são dispensados — o sistema sempre
+    # tem preço por unidade; p_sys × qtd naturalmente excede o preço do display.
+    if not padrao_explicito and p_sys > 0 and (p_sys * qtd) > (v_un_xml * mult * 3):
+        return 1
+
+    # Anti-absurdo #2: preço unitário resultante mínimo R$0.10
+    # Evita divisões absurdas quando p_sys é placeholder (ex: 0.01)
+    # e a descrição menciona pack size que já está embutido no qCom do NF.
+    if v_un_xml / qtd < 0.10:
+        return 1
+
     return qtd
 
 
@@ -130,6 +233,14 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
         infNFe    = tree.getroot().find('.//nfe:infNFe', ns)
         num_nf    = get_xml_text(infNFe, './/nfe:ide/nfe:nNF', ns, "000")
         chave_nfe = infNFe.attrib.get('Id', '')[3:] if infNFe is not None else ""
+
+        # Frete CIF/FOB: 0=CIF (emitente paga, frete=0%), 1=FOB (destinatário paga)
+        mod_frete = get_xml_text(infNFe, './/nfe:transp/nfe:modFrete', ns, "9")
+        if mod_frete == "0":  # CIF — frete por conta do emitente
+            P_FRETE = 0.0
+            print(f"[FRETE] modFrete=0 (CIF) → frete forçado para 0%")
+        else:
+            print(f"[FRETE] modFrete={mod_frete} → usando frete do formulário: {P_FRETE*100:.1f}%")
 
         # API SEFAZ AL
         dados_api = []
@@ -194,6 +305,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                   f"vST_total={v_st_xml + v_st_api:.4f}")
 
             cst = ""
+            p_icms_xml = 0.0
             icms_node = i.find('.//nfe:ICMS', ns) if i is not None else None
             if icms_node is not None:
                 for child in icms_node:
@@ -202,7 +314,9 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                         tag = child.find('nfe:CSOSN', ns)
                     if tag is not None and tag.text is not None:
                         cst = tag.text.strip()
-                        break
+                    tag_p = child.find('nfe:pICMS', ns)
+                    if tag_p is not None and tag_p.text is not None:
+                        p_icms_xml = float(tag_p.text.strip())
 
             ean_xml = limpar_str(get_xml_text(p, 'nfe:cEAN', ns))
             if not ean_xml or ean_xml.upper() == "SEM GTIN":
@@ -220,6 +334,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'vANT':     v_ant_api,
                 'nf_base':  num_nf,
                 'cst':      cst,
+                'pICMS':    p_icms_xml,
             })
 
         df_xml = pd.DataFrame(itens_xml)
@@ -270,9 +385,18 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
             ipi_u   = round(row['vIPI']  / q / qtd_emb, 2)
             cst     = str(row['cst'])
 
+            # Flags de cor baseadas nos valores BRUTOS (antes da divisão por embalagem)
+            # Evita que qtd_emb grande faça st_u/ant_u arredondar para 0
+            tem_st  = row['vST']  > 0.005
+            tem_ant = row['vANT'] > 0.005 and not tem_st
+
             # Preço do sistema já é por unidade — NÃO multiplicar por embalagem
             p_sys_val        = float(row['preco_sys']) if pd.notna(row['preco_sys']) else 0.0
             preco_venda_base = round(p_sys_val, 2) if p_sys_val > 0.01 else 0.0
+
+            # Crédito ICMS: usar pICMS do XML se disponível, senão fallback
+            p_icms = float(row['pICMS']) if pd.notna(row['pICMS']) else 0.0
+            cred_pct = p_icms / 100 if p_icms > 0 else P_CRED
 
             rows.append({
                 'nf':        row['nf_base'],
@@ -288,6 +412,9 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'p_atual':   preco_venda_base,
                 'p_sys_raw': p_sys_val,
                 'qtd_emb':   qtd_emb,
+                'cred_pct':  cred_pct,
+                'tem_st':    tem_st,
+                'tem_ant':   tem_ant,
             })
 
         params_out = {
@@ -346,7 +473,7 @@ def salvar_excel_estilizado(dados, path):
     headers = [
         'NF', 'DESCRIÇÃO', 'REF', 'SKU', 'QTD',
         'NF UNIT', 'ST UNIT', 'ANT UNIT', 'IPI UNIT',
-        'CUSTO REAL', 'FRETE', 'DESPESA', 'CRED. ICMS',
+        'CUSTO REAL', 'FRETE', 'DESPESA', 'CRED ICMS',
         'CST', 'CUSTO ENTRADA',
         'FEDERAL', 'CARTÃO', 'ICMS SAÍDA', 'CUSTO SAÍDA',
         'META %', 'PREÇO MÍN VIÁVEL',
@@ -354,6 +481,7 @@ def salvar_excel_estilizado(dados, path):
         'NF ATC', 'PREÇO ATC',
         'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC',
         'CUSTO SAÍDA ATC', 'MARGEM ATC',
+        'PREÇO PCT ATC', 'P. COMPRA PCT',
         'P.UNIT SISTEMA', 'QTD EMB',
     ]
     for c, h in enumerate(headers, 1):
@@ -365,7 +493,7 @@ def salvar_excel_estilizado(dados, path):
         COL['C_REAL']:  P['mult'],       # col 10 — multiplicador varejo
         COL['FRETE']:   P['frete'],      # col 11
         COL['DESP']:    P['desp'],       # col 12
-        COL['CRED']:    -P['cred'],      # col 13 — negativo
+        COL['CRED']:    -P['cred'],      # col 13 — negativo (referência visual do padrão)
         COL['FED']:     P['fed'],        # col 16
         COL['CARTAO']:  P['cartao'],     # col 17
         COL['ICMS_S']:  P['icm'],        # col 18
@@ -382,8 +510,8 @@ def salvar_excel_estilizado(dados, path):
     # ── Linhas de dados (linha 3 em diante) ──────────────────────────────────
     for idx, row in enumerate(rows):
         r       = idx + 3
-        has_st  = row['st_u']  > 0.005
-        has_ant = row['ant_u'] > 0.005 and row['st_u'] <= 0.005
+        has_st  = row['tem_st']
+        has_ant = row['tem_ant']
         cst     = row['cst']
 
         # Letras das colunas para fórmulas
@@ -437,6 +565,8 @@ def salvar_excel_estilizado(dados, path):
         _c(ws, r, COL['AUDIT_EMB'], row['qtd_emb'],   fill=F_CINZA,
            font=Font(italic=True, color="888888"))
 
+        # AF (agora AG) - Coluna P_PCT referenciada depois das fórmulas
+
         # ── Fórmulas ─────────────────────────────────────────────────────────
 
         # N - CUSTO REAL = NF_U × MULT  ← multiplicador aplicado PRIMEIRO
@@ -448,14 +578,20 @@ def salvar_excel_estilizado(dados, path):
         # K - DESPESA = CUSTO REAL × DESP%
         ws.cell(r, COL['DESP']).value   = f"=ROUND({N}{r}*{K}$2,2)"
 
-        # L - CRED ICMS = NF_U × |CRED%|  (0 se ST/CST isento — ANT não zera o crédito)
-        cst_isentos = f'{Oc}{r}="40",{Oc}{r}="60",{Oc}{r}="102",{Oc}{r}="500"'
-        ws.cell(r, COL['CRED']).value   = (
-            f"=IF(OR({G}{r}>0,{cst_isentos}),"
-            f"0,ROUND({F}{r}*{Lc}$2,2))"
-        )
+        # M (col 13) — CRED ICMS: valor monetário negativo, colorido pelo % usado
+        # A COR da célula indica o percentual (§16 do RULES.md)
+        # O VALOR na célula é o crédito em R$ (ex: -3,12)
+        cst_isento = cst in {'40', '41', '50', '60', '102', '500'}
+        cred_rate  = 0.0 if (has_st or cst_isento) else row['cred_pct']
+        cred_valor = 0.0 if cred_rate == 0.0 else round(row['nf_u'] * cred_rate, 2)
+        cell_cred  = ws.cell(r, COL['CRED'])
+        cell_cred.value          = -cred_valor    # negativo = benefício que reduz custo
+        cell_cred.number_format  = '#,##0.00'
+        cell_cred.fill           = cred_fill(cred_rate)
+        cell_cred.border         = BORDA
+        cell_cred.alignment      = ALI_CTR
 
-        # M - CUSTO ENTRADA = C_REAL + ST + ANT + IPI + FRETE + DESP − CRED
+        # O - CUSTO ENTRADA = C_REAL + ST + ANT + IPI + FRETE + DESP + CRED(negativo)
         ws.cell(r, COL['C_ENT']).value  = (
             f"=ROUND({N}{r}+{G}{r}+{H}{r}+{I}{r}+{J}{r}+{K}{r}+{Lc}{r},2)"
         )
@@ -481,10 +617,14 @@ def salvar_excel_estilizado(dados, path):
             f"=IF({T}{r}>0,ROUND({S}{r}/(1-{T}{r}),2),0)"
         )
 
-        # W - PREÇO VAREJO: usa PREÇO ATUAL se > 0, senão arredondar_99(C_REAL × 2)
+        # W - PREÇO VAREJO: usa PREÇO ATUAL se > 0, senão fallback analítico
+        # Fallback = arredondar_x9(C_ENT / (1 - META - FED% - CART% - ICMS%))
+        # Garante que P_VAR >= P_MIN sem dependência circular
         ws.cell(r, COL['P_VAR']).value  = (
             f"=IF({V}{r}>0,{V}{r},"
-            f"IF({N}{r}<=0,0,INT({N}{r}*2)-IF({N}{r}*2-INT({N}{r}*2)<=0.5,1,0)+0.99))"
+            f"IF({M}{r}<=0,0,"
+            f"IF(1-{T}{r}-{P2}$2-{Qc}$2-IF({G}{r}>0.005,0,{Rc}$2)<=0,{M}{r},"
+            f"INT({M}{r}/(1-{T}{r}-{P2}$2-{Qc}$2-IF({G}{r}>0.005,0,{Rc}$2))*10)/10+0.09)))"
         )
 
         # X - MARGEM REAL = (P_VAR − C_SAIDA) / P_VAR
@@ -521,6 +661,17 @@ def salvar_excel_estilizado(dados, path):
             f"=IF({Za}{r}>0,ROUND(({Za}{r}-{AD}{r})/{Za}{r},4),0)"
         )
 
+        AI_emb = L(COL['AUDIT_EMB'])
+
+        # AF - PREÇO PCT ATC = P_ATC × QTD_EMB (preço de venda do pacote no atacado)
+        ws.cell(r, COL['P_PCT_ATC']).value = f"=ROUND({Za}{r}*{AI_emb}{r},2)"
+        ws.cell(r, COL['P_PCT_ATC']).number_format = '#,##0.00'
+
+        # AG - P. COMPRA PCT = NF_U × QTD_EMB (preço de compra do pacote — custo NF por caixa)
+        F_nfu = L(COL['NF_U'])
+        ws.cell(r, COL['P_COMPRA_PCT']).value = f"=ROUND({F_nfu}{r}*{AI_emb}{r},2)"
+        ws.cell(r, COL['P_COMPRA_PCT']).number_format = '#,##0.00'
+
         # ── Formato numérico para colunas de fórmula ─────────────────────────
         for col_idx, fmt in [
             (COL['C_REAL'],      '#,##0.00'),
@@ -540,8 +691,10 @@ def salvar_excel_estilizado(dados, path):
             (COL['FED_ATC'],     '#,##0.00'),
             (COL['CART_ATC'],    '#,##0.00'),
             (COL['ICM_ATC'],     '#,##0.00'),
-            (COL['C_SAIDA_ATC'], '#,##0.00'),
-            (COL['MARGEM_ATC'],  '0.00%'),
+            (COL['C_SAIDA_ATC'],   '#,##0.00'),
+            (COL['MARGEM_ATC'],    '0.00%'),
+            (COL['P_PCT_ATC'],     '#,##0.00'),
+            (COL['P_COMPRA_PCT'],  '#,##0.00'),
         ]:
             ws.cell(r, col_idx).number_format = fmt
 
@@ -552,7 +705,7 @@ def salvar_excel_estilizado(dados, path):
             cell.alignment = ALI_CTR
 
         # ── Cores ─────────────────────────────────────────────────────────────
-        _skip = {COL['AUDIT_SYS'], COL['AUDIT_EMB'], COL['META']}
+        _skip = {COL['AUDIT_SYS'], COL['AUDIT_EMB'], COL['META'], COL['CRED']}
         if has_st:
             # ST: peach em toda a linha, sem exceção
             for c in range(1, TOTAL_COLS + 1):
@@ -564,17 +717,45 @@ def salvar_excel_estilizado(dados, path):
                 if c not in _skip:
                     ws.cell(r, c).fill = F_AMAR_ANT
             # ...mas preserva as cores especiais de preço por cima
-            ws.cell(r, COL['P_VAR']).fill      = F_AZUL
-            ws.cell(r, COL['MARGEM']).fill     = F_AZUL
-            ws.cell(r, COL['P_MIN']).fill      = F_AMAR
-            ws.cell(r, COL['P_ATC']).fill      = F_AMAR
-            ws.cell(r, COL['MARGEM_ATC']).fill = F_AMAR
+            ws.cell(r, COL['P_VAR']).fill       = F_AZUL
+            ws.cell(r, COL['MARGEM']).fill      = F_AZUL
+            ws.cell(r, COL['P_MIN']).fill       = F_AMAR
+            ws.cell(r, COL['P_ATC']).fill       = F_AMAR
+            ws.cell(r, COL['MARGEM_ATC']).fill  = F_AMAR
+            ws.cell(r, COL['P_PCT_ATC']).fill   = F_AMAR
         else:
-            ws.cell(r, COL['P_VAR']).fill      = F_AZUL
-            ws.cell(r, COL['MARGEM']).fill     = F_AZUL
-            ws.cell(r, COL['P_MIN']).fill      = F_AMAR
-            ws.cell(r, COL['P_ATC']).fill      = F_AMAR
-            ws.cell(r, COL['MARGEM_ATC']).fill = F_AMAR
+            ws.cell(r, COL['P_VAR']).fill       = F_AZUL
+            ws.cell(r, COL['MARGEM']).fill      = F_AZUL
+            ws.cell(r, COL['P_MIN']).fill       = F_AMAR
+            ws.cell(r, COL['P_ATC']).fill       = F_AMAR
+            ws.cell(r, COL['MARGEM_ATC']).fill  = F_AMAR
+            ws.cell(r, COL['P_PCT_ATC']).fill   = F_AMAR
+
+    # ── Legenda de crédito ICMS (só se houver mais de uma faixa na NF) ────────
+    taxas_usadas = sorted(set(round(row['cred_pct'], 4) for row in rows))
+    if taxas_usadas:  # sempre exibe legenda quando há ao menos uma faixa
+        leg_row = len(rows) + 4   # 1 linha de gap após os dados
+        ws.cell(leg_row, 1).value = 'LEGENDA — CRÉDITO ICMS'
+        ws.cell(leg_row, 1).font  = Font(bold=True, size=10)
+        ws.cell(leg_row, 1).fill  = F_PARAM
+        ws.merge_cells(start_row=leg_row, start_column=1,
+                       end_row=leg_row, end_column=4)
+        for i, taxa in enumerate(taxas_usadas):
+            lr = leg_row + 1 + i
+            lbl  = CRED_LABELS.get(taxa, f'{taxa*100:.0f}%')
+            fill = cred_fill(taxa)
+            c1 = ws.cell(lr, 1)
+            c1.value  = f'{taxa*100:.0f}%'
+            c1.fill   = fill
+            c1.font   = Font(bold=True)
+            c1.border = BORDA
+            c1.alignment = ALI_CTR
+            c2 = ws.cell(lr, 2)
+            c2.value  = lbl
+            c2.fill   = fill
+            c2.border = BORDA
+            ws.merge_cells(start_row=lr, start_column=2,
+                           end_row=lr, end_column=4)
 
     # ── Largura das colunas ───────────────────────────────────────────────────
     widths = {
@@ -588,7 +769,7 @@ def salvar_excel_estilizado(dados, path):
         25:10, 26:12,
         27:12, 28:11, 29:10,
         30:15, 31:12,
-        32:14, 33:9,
+        32:14, 33:14, 34:14, 35:9,
     }
     for c, w in widths.items():
         ws.column_dimensions[L(c)].width = w
@@ -600,13 +781,13 @@ def salvar_excel_estilizado(dados, path):
 
 
 # ─── Dashboard HTML ───────────────────────────────────────────────────────────
-def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None):
+def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None, num_nf=None):
     if not rows_data:
         return ""
 
     total     = len(rows_data)
-    com_st    = sum(1 for r in rows_data if r['st_u']  > 0.005)
-    com_ant   = sum(1 for r in rows_data if r['ant_u'] > 0.005 and r['st_u'] <= 0.005)
+    com_st    = sum(1 for r in rows_data if r['tem_st'])
+    com_ant   = sum(1 for r in rows_data if r['tem_ant'])
     sem_ambos = total - com_st - com_ant
     sem_preco = sum(1 for r in rows_data if r['p_atual'] <= 0)
     total_nf  = sum(r['nf_u'] * r['qtd'] for r in rows_data)
@@ -631,15 +812,67 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None):
           <div style="font-size:11px;color:#888;margin-top:2px">{sub}</div>
         </div>"""
 
+    # Embalagens detectadas
+    com_emb = sum(1 for r in rows_data if r.get('qtd_emb', 1) > 1)
+
+    # Créditos ICMS por faixa — com badges coloridos
+    # Usa metricas para aplicar o mesmo filtro CST/ST do Excel (crédito já zerado lá)
+    cred_faixas = {}
+    for r, m in zip(rows_data, metricas or [{}] * len(rows_data)):
+        if m.get('cred', 0) > 0:
+            pct = round(r.get('cred_pct', 0), 4)
+            if pct > 0:
+                cred_faixas[pct] = cred_faixas.get(pct, 0) + 1
+
+    if cred_faixas:
+        badges = []
+        for pct, cnt in sorted(cred_faixas.items()):
+            cor = CRED_CORES.get(pct, 'CCCCCC')
+            badges.append(
+                f'<span style="background:#{cor};padding:2px 8px;border-radius:12px;'
+                f'font-size:11px;font-weight:700;margin:2px;display:inline-block">'
+                f'{cnt}× {pct*100:.0f}%</span>'
+            )
+        cred_resumo = ' '.join(badges)
+    else:
+        cred_resumo = '—'
+
+    sem_preco_pct = (sem_preco / total * 100) if total else 0
+
+    # Alert banner (exibido antes dos cards quando há produtos sem preço)
+    alert_banner = ""
+    if sem_preco > 0:
+        alert_banner = (
+            f'<div style="background:#FEF2F2;border:1px solid #FCA5A5;border-radius:10px;'
+            f'padding:16px 20px;display:flex;align-items:center;gap:16px;margin-bottom:20px">'
+            f'<div style="font-size:22px;flex-shrink:0">⚠️</div>'
+            f'<div style="flex:1">'
+            f'<div style="font-weight:700;color:#DC2626;font-size:13px">'
+            f'Atenção: Produtos sem precificação</div>'
+            f'<div style="font-size:12px;color:#555;margin-top:3px">Detectamos que '
+            f'<strong>{sem_preco} iten(s) ({sem_preco_pct:.0f}%)</strong> ainda não possuem '
+            f'preço de venda definido. Isso compromete a margem estimada.</div>'
+            f'</div></div>'
+        )
+
+    # Cabeçalho com número da NF
+    nf_ref = ""
+    if num_nf:
+        nf_ref = (
+            f'<div style="font-size:11px;color:#888;font-weight:500;margin-bottom:4px">'
+            f'Nota Fiscal: <span style="color:#3b82f6;font-weight:700">#{num_nf}</span></div>'
+        )
+
     cards = "".join([
-        card("Total Itens",     total,                 "#EBF5FB", "produtos na NF"),
-        card("Com ST",          com_st,                "#FCE4D6", "subst. tributária"),
-        card("Com ANT",         com_ant,               "#D1FAE5", "antecipação tributária"),
-        card("Normal",          sem_ambos,             "#E2EFDA", "tributação normal"),
-        card("Sem Preço Sist.", sem_preco,             "#FFF9C4", "usarão cálculo auto"),
-        card("Valor Total NF",  fmt_brl(total_nf),     "#EBF5FB", "soma NF unit × qtd"),
-        card("Margem Estimada", f"{margem_media:.1f}%", cor_margem, "preço atual vs NF unit"),
-        card("Lucro Estimado",  fmt_brl(lucro_total),  cor_lucro, "meta 15% · preço varejo − custo saída"),
+        card("Total Itens",     total,                      "#EBF5FB", "produtos na NF"),
+        card("Com ST",          com_st,                     "#FCE4D6", "subst. tributária"),
+        card("Com ANT",         com_ant,                    "#D1FAE5", "antecipação tributária"),
+        card("Sem Preço Sist.", sem_preco,                  "#FFF9C4", "usarão arredondamento X.X9"),
+        card("Total NF",        fmt_brl(total_nf),          "#EBF5FB", "valor de compra"),
+        card("Margem Est.",     f"{margem_media:.1f}%",     cor_margem, "preço atual vs custo NF"),
+        card("Embalagens",      com_emb,                    "#EBF5FB", f"de {total} detectaram embalagem"),
+        card("Crédito ICMS",    cred_resumo,                "#E2EFDA", "do XML por produto"),
+        card("Lucro Estimado",  fmt_brl(lucro_total),       cor_lucro, "preço varejo − custo saída"),
     ])
 
     pct_st    = total and (com_st    / total * 100)
@@ -662,6 +895,32 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None):
         {_seg(pct_st,   '#FCE4D6', '#784212', 'ST')}
         {_seg(pct_ant,  '#D1FAE5', '#065F46', 'ANT')}
       </div>
+    </div>"""
+
+    # ── Legenda de CST encontrados na NF ─────────────────────────────────────
+    csts_nf = {}
+    for r in rows_data:
+        cst = str(r.get('cst', '')).strip()
+        if cst:
+            csts_nf[cst] = csts_nf.get(cst, 0) + 1
+
+    cst_linhas = ""
+    for cst, qtd_prod in sorted(csts_nf.items(), key=lambda x: x[0]):
+        desc, cor = CST_DESCRICOES.get(cst, (f'Código {cst} — consulte a tabela ICMS', '#F2F2F2'))
+        cst_linhas += (
+            f'<div style="display:flex;align-items:flex-start;gap:10px;'
+            f'padding:8px 12px;border-radius:6px;background:{cor};margin-bottom:6px">'
+            f'<span style="font-size:13px;font-weight:800;color:#1a1a2e;min-width:36px">CST {cst}</span>'
+            f'<span style="font-size:12px;color:#333;flex:1">{desc}</span>'
+            f'<span style="font-size:11px;color:#666;white-space:nowrap">{qtd_prod} produto(s)</span>'
+            f'</div>'
+        )
+
+    cst_html = f"""
+    <div style="margin:20px 0 4px;border-top:1px solid #e8e8e8;padding-top:18px">
+      <div style="font-size:11px;color:#666;font-weight:600;text-transform:uppercase;
+                  letter-spacing:.5px;margin-bottom:10px">Regimes Tributários desta NF</div>
+      {cst_linhas}
     </div>"""
 
     alertas_html = ""
@@ -722,8 +981,10 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None):
 
             chart_html = f"""
       <div style="margin-top:24px;border-top:1px solid #e8e8e8;padding-top:20px">
-        <div style="font-size:11px;color:#666;font-weight:600;text-transform:uppercase;
-                    letter-spacing:.5px;margin-bottom:16px">Lucro Estimado por Produto</div>
+        <div style="margin-bottom:16px">
+          <div style="font-size:15px;font-weight:700;color:#1a1a2e">Projeção de Lucratividade por SKU</div>
+          <div style="font-size:12px;color:#888;margin-top:3px">Lucro bruto baseado na estimativa de conversão de vendas</div>
+        </div>
         <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
           <span style="font-size:12px;color:#666;white-space:nowrap">% Vendido:</span>
           <input type="range" id="ph-slider" min="0" max="100" value="100"
@@ -770,15 +1031,19 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None):
 
     return f"""
     <div style="font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;
-                margin-top:32px;padding:24px;background:#fff;
+                margin-top:32px;padding:28px 32px;background:#fff;
                 border-radius:14px;border:1px solid #e0e0e0;
                 box-shadow:0 2px 12px rgba(0,0,0,.06)">
-      <h3 style="margin:0 0 18px;font-size:17px;color:#1a252f;
-                 border-bottom:2px solid #BDD7EE;padding-bottom:10px">
-        📊 Dashboard da NF
-      </h3>
+      <div style="margin-bottom:20px;padding-bottom:16px;border-bottom:2px solid #BDD7EE">
+        {nf_ref}
+        <h2 style="margin:0;font-size:20px;font-weight:700;color:#1a252f">
+          Visão Geral da Operação
+        </h2>
+      </div>
+      {alert_banner}
       <div style="display:flex;gap:12px;flex-wrap:wrap">{cards}</div>
       {barra}
-      {alertas_html}
+      {cst_html}
       {chart_html}
+      {alertas_html}
     </div>"""

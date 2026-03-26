@@ -5,14 +5,14 @@ import webbrowser
 from threading import Timer
 from flask import Flask, render_template, request, jsonify, send_file
 
-from core.processador import gerar_tabela, salvar_excel_estilizado, gerar_dashboard_html
+from core.processador import gerar_tabela, salvar_excel_estilizado, gerar_dashboard_html, CRED_CORES
 
 
-def _arredondar_99(c_real):
-    if c_real <= 0:
+def _arredondar_x9(val):
+    """Arredonda para X.X9 — mesma lógica da fórmula Excel do P_VAR."""
+    if val <= 0:
         return 0.0
-    x = c_real * 2
-    return int(x) - (1 if (x - int(x)) <= 0.5 else 0) + 0.99
+    return int(val * 10) / 10 + 0.09
 
 
 def _calcular(row, P):
@@ -27,22 +27,30 @@ def _calcular(row, P):
     frete  = round(c_real * P['frete'], 2)
     desp   = round(c_real * P['desp'], 2)
 
-    if st_u > 0.005 or cst in {'40', '60', '102', '500'}:
+    # CORREÇÃO: Adicionado CST 41 e 50 conforme RULES.md §3.6
+    if st_u > 0.005 or cst in {'40', '41', '50', '60', '102', '500'}:
         cred = 0.0
     else:
-        cred = round(nf_u * P['cred'], 2)
+        cred_pct = row.get('cred_pct', P['cred'])
+        cred = round(nf_u * cred_pct, 2)
 
     c_ent = round(c_real + st_u + ant_u + ipi_u + frete + desp - cred, 2)
 
+    meta   = 0.15
     p_atual = row['p_atual']
-    p_var   = p_atual if p_atual > 0 else round(_arredondar_99(c_real), 2)
+    if p_atual > 0:
+        p_var = p_atual
+    else:
+        # Fallback analítico: garante que p_var >= p_min sem dependência circular
+        icms_pct_var = 0.0 if st_u > 0.005 else P['icm']
+        den = 1 - meta - P['fed'] - P['cartao'] - icms_pct_var
+        p_min_base = round(c_ent / den, 4) if den > 0 and c_ent > 0 else c_ent
+        p_var = _arredondar_x9(p_min_base)
 
     fed    = round(p_var * P['fed'],    2)
     cartao = round(p_var * P['cartao'], 2)
     icms_s = 0.0 if st_u > 0.005 else round(p_var * P['icm'], 2)
     c_saida = round(c_ent + fed + cartao + icms_s, 2)
-
-    meta   = 0.15
     p_min  = round(c_saida / (1 - meta), 2) if meta > 0 and c_saida > 0 else 0.0
     margem = round((p_var - c_saida) / p_var, 4) if p_var > 0 else 0.0
     lucro  = round((p_var - c_saida) * qtd, 2)
@@ -107,127 +115,100 @@ def processar():
 
         rows, P, num_nf = resultado
 
-        # ── Gerar Excel ──────────────────────────────────────────────────────
         nome_excel   = f"Precificacao_{fornecedor}_NF_{nota}.xlsx"
         caminho_excel = os.path.join(TEMP_DIR, nome_excel)
         salvar_excel_estilizado(resultado, caminho_excel)
 
-        # ── Calcular métricas para prévia e dashboard ────────────────────────
         metricas    = [_calcular(row, P) for row in rows]
         lucro_total = sum(m['lucro'] for m in metricas)
-
-        # ── Montar tabela HTML de prévia (primeiros 20 produtos) ─────────────
-        # ── Grupos de colunas com rótulo separador no cabeçalho ─────────────
-        # Índice 0-based de cada coluna na lista de cells abaixo:
-        #   0-4   : NF, DESC, REF, SKU, QTD
-        #   5-8   : NF UNIT, ST, ANT, IPI
-        #   9-13  : FRETE, DESPESA, CRED ICMS, C. REAL, C. ENTRADA
-        #   14    : CST
-        #  ── VAREJO ──
-        #   15-18 : FEDERAL, CARTÃO, ICMS S., C. SAÍDA
-        #   19-20 : META %, PREÇO MÍN
-        #   21-23 : PREÇO ATUAL, PREÇO VAREJO, MARGEM
-        #  ── ATACADO ──
-        #   24-28 : NF ATC, FEDERAL ATC, CARTÃO ATC, ICMS ATC, C. SAÍDA ATC
-        #   29-30 : PREÇO ATC, MARGEM ATC
 
         col_headers = [
             'NF', 'DESCRIÇÃO', 'REF', 'SKU', 'QTD',
             'NF UNIT', 'ST UNIT', 'ANT UNIT', 'IPI UNIT',
             'FRETE', 'DESPESA', 'CRED ICMS',
             'C. REAL', 'C. ENTRADA', 'CST',
-            # varejo
             'FEDERAL', 'CARTÃO', 'ICMS S.', 'C. SAÍDA',
             'META %', 'PREÇO MÍN',
             'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM',
-            # atacado
             'NF ATC', 'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
             'PREÇO ATC', 'MARGEM ATC',
+            'PREÇO PCT ATC', 'P. COMPRA PCT',
         ]
 
-        # Cabeçalho com separador visual entre varejo e atacado
         html  = '<table class="table table-sm table-bordered table-hover"><thead>'
         html += '<tr>'
         html += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
         html += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
-        html += '<th colspan="7" style="background:#ede9fe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#5b21b6">ATACADO</th>'
+        html += '<th colspan="9" style="background:#ede9fe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#5b21b6">ATACADO</th>'
         html += '</tr><tr>'
         html += ''.join(f'<th>{h}</th>' for h in col_headers)
         html += '</tr></thead><tbody>'
 
-        # Índices (0-based) com cor especial em linhas normais:
-        # azul  → PREÇO VAREJO (22), MARGEM (23)
-        # amar  → PREÇO MÍN (20), PREÇO ATC (29), MARGEM ATC (30)
-        _AMAR = {20, 29, 30}
+        _AMAR = {20, 29, 30, 31}   # PREÇO MÍN, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC
         _AZUL = {22, 23}
 
         for row, m in zip(rows[:20], metricas[:20]):
-            has_st  = row['st_u']  > 0.005
-            has_ant = row['ant_u'] > 0.005
-
-            if has_st:
-                row_bg = '#FCE4D6'   # peach  — produto com ST
-            elif has_ant:
-                row_bg = '#D1FAE5'   # verde menta — produto com ANT (antecipação, sem ST)
-            else:
-                row_bg = None
+            has_st  = row['tem_st']
+            has_ant = row['tem_ant']
 
             html += '<tr>'
 
             cells = [
-                row['nf'],                                                                    # 0
-                row['desc'][:55],                                                             # 1
-                row['ref'],                                                                   # 2
-                row['sku'],                                                                   # 3
-                int(row['qtd']),                                                              # 4
-                f"R$ {row['nf_u']:.2f}",                                                     # 5
-                f"R$ {row['st_u']:.2f}"  if row['st_u']  > 0.005 else '-',                  # 6
-                f"R$ {row['ant_u']:.2f}" if row['ant_u'] > 0.005 else '-',                  # 7
-                f"R$ {row['ipi_u']:.2f}" if row['ipi_u'] > 0.005 else '-',                  # 8
-                f"R$ {m['frete']:.2f}",                                                      # 9
-                f"R$ {m['desp']:.2f}",                                                       # 10
-                f"R$ {m['cred']:.2f}",                                                       # 11
-                f"R$ {m['c_real']:.2f}",                                                     # 12
-                f"R$ {m['c_ent']:.2f}",                                                      # 13
-                row['cst'],                                                                   # 14
-                # varejo
-                f"R$ {m['fed']:.2f}",                                                        # 15
-                f"R$ {m['cartao']:.2f}",                                                     # 16
-                f"R$ {m['icms_s']:.2f}",                                                     # 17
-                f"R$ {m['c_saida']:.2f}",                                                    # 18
-                '15%',                                                                        # 19
-                f"R$ {m['p_min']:.2f}",                                                      # 20
-                f"R$ {row['p_atual']:.2f}" if row['p_atual'] > 0 else '<span style="color:#e74c3c">SEM PREÇO</span>', # 21
-                f"R$ {m['p_var']:.2f}",                                                      # 22
-                f"{m['margem']*100:.1f}%",                                                   # 23
-                # atacado
-                f"R$ {m['nf_atc']:.2f}",                                                     # 24
-                f"R$ {m['fed_atc']:.2f}",                                                    # 25
-                f"R$ {m['cart_atc']:.2f}",                                                   # 26
-                f"R$ {m['icm_atc']:.2f}",                                                    # 27
-                f"R$ {m['c_saida_atc']:.2f}",                                                # 28
-                f"R$ {m['p_atc']:.2f}",                                                      # 29
-                f"{m['margem_atc']*100:.1f}%",                                               # 30
+                row['nf'],
+                row['desc'][:55],
+                row['ref'],
+                row['sku'],
+                int(row['qtd']),
+                f"R$ {row['nf_u']:.2f}",
+                f"R$ {row['st_u']:.2f}"  if row['st_u']  > 0.001 else '-',
+                f"R$ {row['ant_u']:.2f}" if row['ant_u'] > 0.001 else '-',
+                f"R$ {row['ipi_u']:.2f}" if row['ipi_u'] > 0.001 else '-',
+                f"R$ {m['frete']:.2f}",
+                f"R$ {m['desp']:.2f}",
+                m['cred'],  # 11 — valor R$ do crédito (já filtrado por CST/ST em _calcular)
+                f"R$ {m['c_real']:.2f}",
+                f"R$ {m['c_ent']:.2f}",
+                row['cst'],
+                f"R$ {m['fed']:.2f}",
+                f"R$ {m['cartao']:.2f}",
+                f"R$ {m['icms_s']:.2f}",
+                f"R$ {m['c_saida']:.2f}",
+                '15%',
+                f"R$ {m['p_min']:.2f}",
+                f"R$ {row['p_atual']:.2f}" if row['p_atual'] > 0 else '<span style="color:#e74c3c">SEM PREÇO</span>',
+                f"R$ {m['p_var']:.2f}",
+                f"{m['margem']*100:.1f}%",
+                f"R$ {m['nf_atc']:.2f}",
+                f"R$ {m['fed_atc']:.2f}",
+                f"R$ {m['cart_atc']:.2f}",
+                f"R$ {m['icm_atc']:.2f}",
+                f"R$ {m['c_saida_atc']:.2f}",
+                f"R$ {m['p_atc']:.2f}",
+                f"{m['margem_atc']*100:.1f}%",
+                f"R$ {round(m['p_atc'] * row['qtd_emb'], 2):.2f}",        # 31 PREÇO PCT ATC
+                f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",       # 32 P. COMPRA PCT
             ]
 
-            # Faixa de colunas atacado (24-30)
-            _ATC_RANGE = set(range(24, 31))
+            _ATC_RANGE = set(range(24, 33))
 
             for idx, val in enumerate(cells):
+                # Índice 11 = CRED ICMS — valor R$ na célula, cor indica o % usado
+                if idx == 11:
+                    # Se m['cred']==0 (CST isento/ST) usa cinza; senão usa a cor da faixa real
+                    pct_val = row.get('cred_pct', 0.0) if m['cred'] > 0 else 0.0
+                    cor_hex = CRED_CORES.get(round(pct_val, 4), 'FFFFFF')
+                    display = f"R$ {val:.2f}" if isinstance(val, (int, float)) else str(val)
+                    html += f'<td style="background:#{cor_hex};font-weight:600">{display}</td>'
+                    continue
                 if has_st:
-                    # ST: peach em tudo, sem exceção
                     style = ' style="background:#FCE4D6"'
                 elif idx in _AZUL:
-                    # PREÇO VAREJO / MARGEM: azul sempre (prevalece sobre ANT)
                     style = ' style="background:#BDD7EE;font-weight:600"'
                 elif idx in _AMAR:
-                    # PREÇO MÍN / PREÇO ATC / MARGEM ATC: amarelo sempre (prevalece sobre ANT)
                     style = ' style="background:#FFF2CC;font-weight:600"'
                 elif has_ant:
-                    # ANT: verde menta nas demais células
                     style = ' style="background:#D1FAE5"'
                 elif idx in _ATC_RANGE:
-                    # Normal: roxo suave na faixa atacado
                     style = ' style="background:#F3E8FF"'
                 else:
                     style = ''
@@ -239,8 +220,7 @@ def processar():
         if len(rows) > 20:
             html += f'<p class="text-muted small">Mostrando 20 de {len(rows)} produtos. Baixe o Excel para ver todos.</p>'
 
-        # ── Dashboard HTML ───────────────────────────────────────────────────
-        dashboard_html = gerar_dashboard_html(rows, lucro_total, metricas)
+        dashboard_html = gerar_dashboard_html(rows, lucro_total, metricas, num_nf=num_nf)
 
         return jsonify({
             'sucesso':      True,
