@@ -357,30 +357,27 @@ A preview tem **cabeçalho duplo**: a primeira linha agrupa as colunas com rótu
 
 | Coluna (índice 0-based) | Cor | Grupo |
 |------------------------|-----|-------|
-| 20 — PREÇO MÍN | Amarelo `#FFF2CC` + bold | Varejo |
+| 15 — FEDERAL | Azul `#BDD7EE` + bold | Varejo |
+| 16 — CARTÃO | Azul `#BDD7EE` + bold | Varejo |
+| 17 — ICMS S. | Azul `#BDD7EE` + bold | Varejo |
+| 18 — C. SAÍDA | Azul `#BDD7EE` + bold | Varejo |
+| 20 — PREÇO MÍN VRJ | Azul `#BDD7EE` + bold | Varejo |
 | 22 — PREÇO VAREJO | Azul `#BDD7EE` + bold | Varejo |
 | 23 — MARGEM | Azul `#BDD7EE` + bold | Varejo |
-| 24 — NF ATC | Amarelo suave `#F3E8FF` | Atacado |
-| 25 — FEDERAL ATC | Amarelo suave `#F3E8FF` | Atacado |
-| 26 — CARTÃO ATC | Amarelo suave `#F3E8FF` | Atacado |
-| 27 — ICMS ATC | Amarelo suave `#F3E8FF` | Atacado |
-| 28 — C. SAÍDA ATC | Amarelo suave `#F3E8FF` | Atacado |
-| 29 — PREÇO ATC | Amarelo `#FFF2CC` + bold | Atacado |
-| 30 — MARGEM ATC | Amarelo `#FFF2CC` + bold | Atacado |
+| 24–32 — bloco atacado completo | Amarelo `#FFF2CC` + bold | Atacado |
 
 > ST e ANT têm prioridade — linha pêssego/verde menta sobrepõe todas as cores de coluna.
-> A faixa inteira de colunas atacado (24-30) recebe `#F3E8FF` em linhas normais para separação visual, exceto PREÇO ATC e MARGEM ATC que recebem amarelo forte.
 
 ### 8.3 Excel (openpyxl)
 
 | Cor | Hex | Aplicação |
 |-----|-----|-----------|
-| Azul | `#BDD7EE` | PREÇO VAREJO + MARGEM REAL (linhas normais) |
-| Amarelo | `#FFF2CC` | PREÇO MÍN VIÁVEL + PREÇO ATC + MARGEM ATC (linhas normais) |
+| Azul | `#BDD7EE` | Bloco VAREJO: FEDERAL, CARTÃO, ICMS SAÍDA, CUSTO SAÍDA, PREÇO MÍN VIÁVEL VRJ, PREÇO VAREJO, MARGEM REAL |
+| Amarelo | `#FFF2CC` | Bloco ATACADO completo: NF ATC, FEDERAL ATC, CARTÃO ATC, ICMS ATC, CUSTO SAÍDA ATC, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT |
 | Verde menta | `#D1FAE5` | Linha inteira de produto ANT (ant_u > 0.005 e st_u ≤ 0.005) |
 | Verde | `#E2EFDA` | META % (editável por produto — todas as linhas) |
 | Pêssego | `#FCE4D6` | Linha inteira de produto ST (st_u > 0.005) |
-| Cinza | `#D9D9D9` | Colunas de auditoria P.UNIT SISTEMA e QTD EMB |
+| Cinza | `#D9D9D9` | Colunas de auditoria P.UNIT SISTEMA, QTD EMB e TAXA CRED (quando ST/isento) |
 | Param | `#F2F2F2` | Linha 1 (cabeçalhos) e linha 2 (parâmetros) |
 
 ---

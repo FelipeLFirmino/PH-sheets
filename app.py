@@ -129,7 +129,7 @@ def processar():
             'FRETE', 'DESPESA', 'CRED ICMS',
             'C. REAL', 'C. ENTRADA', 'CST',
             'FEDERAL', 'CARTÃO', 'ICMS S.', 'C. SAÍDA',
-            'META %', 'PREÇO MÍN',
+            'META %', 'PREÇO MÍN VRJ',
             'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM',
             'NF ATC', 'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
             'PREÇO ATC', 'MARGEM ATC',
@@ -145,8 +145,10 @@ def processar():
         html += ''.join(f'<th>{h}</th>' for h in col_headers)
         html += '</tr></thead><tbody>'
 
-        _AMAR = {20, 29, 30, 31}   # PREÇO MÍN, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC
-        _AZUL = {22, 23}
+        # idx 0-based: 15=FEDERAL 16=CARTÃO 17=ICMS S. 18=C.SAÍDA 20=PREÇO MÍN VRJ 22=P.VAREJO 23=MARGEM
+        _AZUL = {15, 16, 17, 18, 20, 22, 23}
+        # idx 24-32: todo o bloco atacado
+        _AMAR = set(range(24, 33))
 
         for row, m in zip(rows[:20], metricas[:20]):
             has_st  = row['tem_st']
@@ -190,12 +192,9 @@ def processar():
                 f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",       # 32 P. COMPRA PCT
             ]
 
-            _ATC_RANGE = set(range(24, 33))
-
             for idx, val in enumerate(cells):
-                # Índice 11 = CRED ICMS — valor R$ na célula, cor indica o % usado
+                # Índice 11 = CRED ICMS — cor indica o % de origem
                 if idx == 11:
-                    # Se m['cred']==0 (CST isento/ST) usa cinza; senão usa a cor da faixa real
                     pct_val = row.get('cred_pct', 0.0) if m['cred'] > 0 else 0.0
                     cor_hex = CRED_CORES.get(round(pct_val, 4), 'FFFFFF')
                     display = f"R$ {val:.2f}" if isinstance(val, (int, float)) else str(val)
@@ -209,8 +208,6 @@ def processar():
                     style = ' style="background:#FFF2CC;font-weight:600"'
                 elif has_ant:
                     style = ' style="background:#D1FAE5"'
-                elif idx in _ATC_RANGE:
-                    style = ' style="background:#F3E8FF"'
                 else:
                     style = ''
                 html += f'<td{style}>{val}</td>'

@@ -477,7 +477,7 @@ def salvar_excel_estilizado(dados, path):
         'CUSTO REAL', 'FRETE', 'DESPESA', 'CRED ICMS',
         'CST', 'CUSTO ENTRADA',
         'FEDERAL', 'CARTÃO', 'ICMS SAÍDA', 'CUSTO SAÍDA',
-        'META %', 'PREÇO MÍN VIÁVEL',
+        'META %', 'PREÇO MÍN VIÁVEL VRJ',
         'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM REAL',
         'NF ATC', 'PREÇO ATC',
         'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC',
@@ -488,6 +488,15 @@ def salvar_excel_estilizado(dados, path):
     ]
     for c, h in enumerate(headers, 1):
         _c(ws, 1, c, h, fill=F_PARAM, bold=True)
+
+    # Cabeçalhos varejo em azul
+    for col_key in ('FED', 'CARTAO', 'ICMS_S', 'C_SAIDA', 'P_MIN', 'P_VAR', 'MARGEM'):
+        ws.cell(1, COL[col_key]).fill = F_AZUL
+
+    # Cabeçalhos atacado em amarelo
+    for col_key in ('NF_ATC', 'P_ATC', 'FED_ATC', 'CART_ATC', 'ICM_ATC',
+                    'C_SAIDA_ATC', 'MARGEM_ATC', 'P_PCT_ATC', 'P_COMPRA_PCT'):
+        ws.cell(1, COL[col_key]).fill = F_AMAR
 
     # ── Linha 2: Parâmetros ──────────────────────────────────────────────────
     # col 10 = MULT (número), cols % = formatados como percentual
@@ -725,6 +734,13 @@ def salvar_excel_estilizado(dados, path):
 
         # ── Cores ─────────────────────────────────────────────────────────────
         _skip = {COL['AUDIT_SYS'], COL['AUDIT_EMB'], COL['AUDIT_CRED'], COL['META'], COL['CRED']}
+        # Colunas VAREJO destacadas em azul
+        _azul = {COL['FED'], COL['CARTAO'], COL['ICMS_S'], COL['C_SAIDA'],
+                 COL['P_MIN'], COL['P_VAR'], COL['MARGEM']}
+        # Colunas ATACADO destacadas em amarelo
+        _amar = {COL['NF_ATC'], COL['P_ATC'], COL['FED_ATC'], COL['CART_ATC'],
+                 COL['ICM_ATC'], COL['C_SAIDA_ATC'], COL['MARGEM_ATC'],
+                 COL['P_PCT_ATC'], COL['P_COMPRA_PCT']}
         if has_st:
             # ST: peach em toda a linha, sem exceção
             for c in range(1, TOTAL_COLS + 1):
@@ -735,20 +751,16 @@ def salvar_excel_estilizado(dados, path):
             for c in range(1, TOTAL_COLS + 1):
                 if c not in _skip:
                     ws.cell(r, c).fill = F_AMAR_ANT
-            # ...mas preserva as cores especiais de preço por cima
-            ws.cell(r, COL['P_VAR']).fill       = F_AZUL
-            ws.cell(r, COL['MARGEM']).fill      = F_AZUL
-            ws.cell(r, COL['P_MIN']).fill       = F_AMAR
-            ws.cell(r, COL['P_ATC']).fill       = F_AMAR
-            ws.cell(r, COL['MARGEM_ATC']).fill  = F_AMAR
-            ws.cell(r, COL['P_PCT_ATC']).fill   = F_AMAR
+            # ...mas preserva as cores de varejo/atacado por cima
+            for c in _azul:
+                ws.cell(r, c).fill = F_AZUL
+            for c in _amar:
+                ws.cell(r, c).fill = F_AMAR
         else:
-            ws.cell(r, COL['P_VAR']).fill       = F_AZUL
-            ws.cell(r, COL['MARGEM']).fill      = F_AZUL
-            ws.cell(r, COL['P_MIN']).fill       = F_AMAR
-            ws.cell(r, COL['P_ATC']).fill       = F_AMAR
-            ws.cell(r, COL['MARGEM_ATC']).fill  = F_AMAR
-            ws.cell(r, COL['P_PCT_ATC']).fill   = F_AMAR
+            for c in _azul:
+                ws.cell(r, c).fill = F_AZUL
+            for c in _amar:
+                ws.cell(r, c).fill = F_AMAR
 
     # ── Legenda de crédito ICMS (só se houver mais de uma faixa na NF) ────────
     taxas_usadas = sorted(set(round(row['cred_pct'], 4) for row in rows))
