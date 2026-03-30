@@ -1,0 +1,199 @@
+"""
+Testes de extrair_qtd_embalagem().
+
+Esta função é a mais frágil do sistema — qualquer ajuste nos 4 padrões regex
+pode introduzir regressões silenciosas. Cada padrão e cada proteção anti-absurdo
+tem pelo menos um teste dedicado.
+
+Assinatura: extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult)
+  - desc_xml : descrição do produto na NFe
+  - v_un_xml : valor unitário na NF (preço de custo)
+  - p_sys    : preço atual no sistema (0 se não cadastrado)
+  - mult     : multiplicador varejo (padrão 2.0)
+"""
+import pytest
+from core.processador import extrair_qtd_embalagem
+
+
+# ─── Padrão 1 — Explícito (CAIXA COM N, PCT C/N, KIT COM N) ──────────────────
+
+class TestPadraoExplicito:
+    """
+    Padrão 1: r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\\s*C/|CX\\s*C/|C/)\\s*(\\d+)'
+    Suficientemente explícito para dispensar o anti-absurdo de preço.
+    """
+
+    def test_caixa_com(self):
+        assert extrair_qtd_embalagem("CAIXA COM 12 CANECAS", 60.0, 6.0, 2.0) == 12
+
+    def test_pacote_com(self):
+        assert extrair_qtd_embalagem("PACOTE COM 24 COPOS", 48.0, 2.5, 2.0) == 24
+
+    def test_kit_com(self):
+        assert extrair_qtd_embalagem("KIT COM 6 PECAS COLORIDAS", 18.0, 4.0, 2.0) == 6
+
+    def test_pct_barra(self):
+        assert extrair_qtd_embalagem("PCT C/24 GUARDANAPOS", 12.0, 0.80, 2.0) == 24
+
+    def test_pct_com_espaco(self):
+        assert extrair_qtd_embalagem("PCT  C/24 GUARDANAPOS", 12.0, 0.80, 2.0) == 24
+
+    def test_cx_barra(self):
+        assert extrair_qtd_embalagem("CX C/10 PRATOS BRANCO", 30.0, 4.0, 2.0) == 10
+
+    def test_case_insensitive(self):
+        assert extrair_qtd_embalagem("caixa com 6 tigelas", 18.0, 4.0, 2.0) == 6
+
+    def test_um_nao_retorna_1(self):
+        # qtd detectada = 1 → retorna 1 sem multiplicar
+        assert extrair_qtd_embalagem("CAIXA COM 1 PRODUTO", 10.0, 20.0, 2.0) == 1
+
+
+# ─── Padrão 2 — Número no início ("12 CANECAS") ──────────────────────────────
+
+class TestPadraoInicio:
+    """
+    Padrão 2: r'^(\\d+)\\s+(?!(?:ML|MG|KG|GR|LT|L|CM|MM|M|UN|PC|PCS|PCT|UNID)\\b)'
+    Ambíguo — exige p_sys > 0.02 e passa pelo anti-absurdo de preço.
+    """
+
+    def test_numero_antes_produto(self):
+        # 12 canecas, p_sys=6.0, v_un_xml=30.0, mult=2.0
+        # anti-absurdo: p_sys*12=72 vs 30*2*3=180 → 72 <= 180 → OK
+        assert extrair_qtd_embalagem("12 CANECAS INOX 300ML", 30.0, 6.0, 2.0) == 12
+
+    def test_numero_6_tigelas(self):
+        # p_sys*6=30 vs 12*2*3=72 → OK
+        assert extrair_qtd_embalagem("6 TIGELAS COLORIDAS", 12.0, 5.0, 2.0) == 6
+
+    # --- Falsos positivos que DEVEM retornar 1 ---
+
+    def test_falso_positivo_ml(self):
+        # "500 ML" → ML está na lista de exclusão → qtd = 1
+        assert extrair_qtd_embalagem("500 ML AGUA MINERAL", 2.0, 2.0, 2.0) == 1
+
+    def test_falso_positivo_mg(self):
+        assert extrair_qtd_embalagem("500 MG SUPLEMENTO", 15.0, 15.0, 2.0) == 1
+
+    def test_falso_positivo_kg(self):
+        assert extrair_qtd_embalagem("5 KG ARROZ", 10.0, 10.0, 2.0) == 1
+
+    def test_falso_positivo_gr(self):
+        assert extrair_qtd_embalagem("250 GR CAFE", 8.0, 8.0, 2.0) == 1
+
+    def test_falso_positivo_lt(self):
+        assert extrair_qtd_embalagem("2 LT OLEO", 5.0, 5.0, 2.0) == 1
+
+    def test_falso_positivo_un(self):
+        assert extrair_qtd_embalagem("1 UN PRODUTO", 10.0, 10.0, 2.0) == 1
+
+    def test_falso_positivo_pcs(self):
+        assert extrair_qtd_embalagem("10 PCS PARAFUSO", 5.0, 5.0, 2.0) == 1
+
+    # --- Proteção: p_sys muito baixo (placeholder) ---
+
+    def test_sem_preco_sistema_retorna_1(self):
+        # p_sys <= 0.02 → ambíguo sem preço real → retorna 1
+        assert extrair_qtd_embalagem("12 CANECAS INOX", 30.0, 0.0, 2.0) == 1
+
+    def test_preco_placeholder_retorna_1(self):
+        assert extrair_qtd_embalagem("6 TIGELAS", 12.0, 0.01, 2.0) == 1
+
+    # --- Anti-absurdo: p_sys × qtd > v_un_xml × mult × 3 ---
+
+    def test_anti_absurdo_preco(self):
+        # p_sys=50.0, qtd=12 → 50*12=600 vs 30*2*3=180 → 600 > 180 → retorna 1
+        # Significa: o sistema já cadastrou o preço por caixa, não por unidade
+        assert extrair_qtd_embalagem("12 CANECAS", 30.0, 50.0, 2.0) == 1
+
+
+# ─── Padrão 3 — Sufixo explícito (PT24UN, DP 18 UN) ─────────────────────────
+
+class TestPadraoFinal:
+    """
+    Padrão 3: r'(?:PT|DP|POTE|POLYBAG|DISPLAY)\\s*(\\d+)\\s*(?:UN|U(?:\\s|$|\\]))?'
+    Explícito como o Padrão 1 — dispensa anti-absurdo de preço.
+    """
+
+    def test_pt_sem_espaco(self):
+        assert extrair_qtd_embalagem("CANETA ESFER PT24UN", 12.0, 0.80, 2.0) == 24
+
+    def test_dp_com_espaco(self):
+        assert extrair_qtd_embalagem("CANETA DP 18 UN AZUL", 18.0, 1.50, 2.0) == 18
+
+    def test_pote(self):
+        assert extrair_qtd_embalagem("CLIPS POTE 48 UN", 24.0, 0.60, 2.0) == 48
+
+    def test_display(self):
+        assert extrair_qtd_embalagem("DISPLAY 12 PORTA CANETAS", 60.0, 5.0, 2.0) == 12
+
+    def test_polybag(self):
+        assert extrair_qtd_embalagem("BROCHE POLYBAG 36", 18.0, 0.50, 2.0) == 36
+
+
+# ─── Padrão 4 — DS Display ("DS NOME - 84") ──────────────────────────────────
+
+class TestPadraoDS:
+    """
+    Padrão 4: r'^DS\\b.*-\\s*(\\d+)\\s*(?:PCS)?\\s*$'
+    Fornecedores de papelaria: DS = Display com N unidades.
+    Número vem SEMPRE após o último traço.
+    """
+
+    def test_ds_simples(self):
+        assert extrair_qtd_embalagem("DS CANECAS OXFORD - 84", 420.0, 5.0, 2.0) == 84
+
+    def test_ds_com_pcs(self):
+        assert extrair_qtd_embalagem("DS CLIPS SORTIDOS - 207 PCS", 207.0, 1.0, 2.0) == 207
+
+    def test_ds_case_insensitive(self):
+        assert extrair_qtd_embalagem("ds porta lapis - 36", 90.0, 2.50, 2.0) == 36
+
+    def test_ds_sem_traco_nao_detecta(self):
+        # Sem traço = não é padrão DS → retorna 1
+        assert extrair_qtd_embalagem("DS PRODUTO QUALQUER", 10.0, 5.0, 2.0) == 1
+
+
+# ─── Anti-absurdo universal: preço unitário mínimo ───────────────────────────
+
+class TestAntiAbsurdoUnitario:
+    """
+    Se v_un_xml / qtd < R$0.10 → impossível ser embalagem real → retorna 1.
+    Protege contra descrições como "CAIXA COM 500" para um produto de R$2.
+    """
+
+    def test_valor_unitario_minimo(self):
+        # v_un_xml=2.0, qtd=100 → unitário=0.02 < 0.10 → retorna 1
+        assert extrair_qtd_embalagem("CAIXA COM 100 UNIDADES", 2.0, 0.05, 2.0) == 1
+
+    def test_valor_unitario_ok(self):
+        # v_un_xml=60.0, qtd=12 → unitário=5.0 >= 0.10 → retorna 12
+        assert extrair_qtd_embalagem("CAIXA COM 12 UNIDADES", 60.0, 6.0, 2.0) == 12
+
+
+# ─── Produto sem embalagem ────────────────────────────────────────────────────
+
+class TestSemEmbalagem:
+    def test_produto_simples(self):
+        assert extrair_qtd_embalagem("CANETA ESFEROGRAFICA AZUL", 1.50, 3.0, 2.0) == 1
+
+    def test_descricao_vazia(self):
+        assert extrair_qtd_embalagem("", 5.0, 10.0, 2.0) == 1
+
+    def test_descricao_numerica_no_meio(self):
+        # Número no meio (não no início) não dispara Padrão 2
+        assert extrair_qtd_embalagem("CANETA REF 123 AZUL", 1.50, 3.0, 2.0) == 1
+
+
+# ─── Prioridade dos padrões ───────────────────────────────────────────────────
+
+class TestPrioridadeDePatterns:
+    """
+    Padrão 1 tem prioridade sobre Padrão 2.
+    Se ambos matcham, Padrão 1 deve vencer.
+    """
+
+    def test_padrao1_prevalece_sobre_padrao2(self):
+        # "12 CANECAS CAIXA COM 6" → Padrão 1 encontra 6, Padrão 2 encontraria 12
+        # Padrão 1 é testado primeiro → retorna 6
+        assert extrair_qtd_embalagem("12 CANECAS CAIXA COM 6 UND", 30.0, 3.0, 2.0) == 6

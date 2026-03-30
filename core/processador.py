@@ -85,8 +85,9 @@ COL = {
     'P_PCT_ATC': 32,
     'P_COMPRA_PCT': 33,
     'AUDIT_SYS': 34, 'AUDIT_EMB': 35,
+    'AUDIT_CRED': 36,  # taxa de crédito ICMS por produto (colorida por origem, editável)
 }
-TOTAL_COLS = 35
+TOTAL_COLS = 36
 
 # ─── Paleta de cores por % de crédito ICMS ───────────────────────────────────
 # Usada na coluna CRED do Excel e na prévia HTML
@@ -483,6 +484,7 @@ def salvar_excel_estilizado(dados, path):
         'CUSTO SAÍDA ATC', 'MARGEM ATC',
         'PREÇO PCT ATC', 'P. COMPRA PCT',
         'P.UNIT SISTEMA', 'QTD EMB',
+        'TAXA CRED',  # col 36 — taxa de crédito ICMS por produto (colorida por origem)
     ]
     for c, h in enumerate(headers, 1):
         _c(ws, 1, c, h, fill=F_PARAM, bold=True)
@@ -539,6 +541,7 @@ def salvar_excel_estilizado(dados, path):
         AC = L(COL['ICM_ATC'])    # ICMS ATC
         AD = L(COL['C_SAIDA_ATC'])# CUSTO SAÍDA ATC
         AE = L(COL['MARGEM_ATC']) # MARGEM ATC
+        AJc = L(COL['AUDIT_CRED'])  # taxa de crédito ICMS por produto
 
         # Valores fixos (vêm do XML/CSV)
         _c(ws, r, COL['NF'],    row['nf'])
@@ -565,7 +568,16 @@ def salvar_excel_estilizado(dados, path):
         _c(ws, r, COL['AUDIT_EMB'], row['qtd_emb'],   fill=F_CINZA,
            font=Font(italic=True, color="888888"))
 
-        # AF (agora AG) - Coluna P_PCT referenciada depois das fórmulas
+        # AUDIT_CRED — taxa de crédito ICMS por produto, colorida pela origem
+        # É também o operando da fórmula CRED: alterar esta célula muda o crédito calculado
+        cst_isento = cst in {'40', '41', '50', '60', '102', '500'}
+        cred_rate  = 0.0 if (has_st or cst_isento) else row['cred_pct']
+        cell_ac = ws.cell(r, COL['AUDIT_CRED'])
+        cell_ac.value          = row['cred_pct']
+        cell_ac.number_format  = '0.00%'
+        cell_ac.fill           = cred_fill(cred_rate)
+        cell_ac.border         = BORDA
+        cell_ac.alignment      = ALI_CTR
 
         # ── Fórmulas ─────────────────────────────────────────────────────────
 
@@ -578,18 +590,23 @@ def salvar_excel_estilizado(dados, path):
         # K - DESPESA = CUSTO REAL × DESP%
         ws.cell(r, COL['DESP']).value   = f"=ROUND({N}{r}*{K}$2,2)"
 
-        # M (col 13) — CRED ICMS: valor monetário negativo, colorido pelo % usado
-        # A COR da célula indica o percentual (§16 do RULES.md)
-        # O VALOR na célula é o crédito em R$ (ex: -3,12)
-        cst_isento = cst in {'40', '41', '50', '60', '102', '500'}
-        cred_rate  = 0.0 if (has_st or cst_isento) else row['cred_pct']
-        cred_valor = 0.0 if cred_rate == 0.0 else round(row['nf_u'] * cred_rate, 2)
-        cell_cred  = ws.cell(r, COL['CRED'])
-        cell_cred.value          = -cred_valor    # negativo = benefício que reduz custo
-        cell_cred.number_format  = '#,##0.00'
-        cell_cred.fill           = cred_fill(cred_rate)
-        cell_cred.border         = BORDA
-        cell_cred.alignment      = ALI_CTR
+        # M (col 13) — CRED ICMS: fórmula que lê a taxa diretamente da coluna TAXA CRED
+        # A COR da célula indica o percentual de origem (§16 do RULES.md)
+        # A FÓRMULA zera automaticamente se ST>0.005 ou CST isento
+        # O usuário pode alterar a taxa na coluna TAXA CRED e o crédito recalcula
+        _cst_zero = (
+            f'OR({Oc}{r}="40",{Oc}{r}="41",{Oc}{r}="50",'
+            f'{Oc}{r}="60",{Oc}{r}="102",{Oc}{r}="500")'
+        )
+        cell_cred = ws.cell(r, COL['CRED'])
+        cell_cred.value = (
+            f'=IF(OR({G}{r}>0.005,{_cst_zero}),0,'
+            f'-ROUND({F}{r}*{AJc}{r},2))'
+        )
+        cell_cred.number_format = '#,##0.00'
+        cell_cred.fill          = cred_fill(cred_rate)
+        cell_cred.border        = BORDA
+        cell_cred.alignment     = ALI_CTR
 
         # O - CUSTO ENTRADA = C_REAL + ST + ANT + IPI + FRETE + DESP + CRED(negativo)
         ws.cell(r, COL['C_ENT']).value  = (
@@ -602,9 +619,10 @@ def salvar_excel_estilizado(dados, path):
         # Q - CARTÃO = P_VAR × CART%
         ws.cell(r, COL['CARTAO']).value = f"=ROUND({W}{r}*{Qc}$2,2)"
 
-        # R - ICMS SAÍDA = P_VAR × ICMS%  (0 se ST — ICMS já recolhido pelo substituto)
+        # R - ICMS SAÍDA = max(0, P_VAR × ICMS% − ANT_U)
+        # ST zera tudo; ANT reduz (não zera) — o valor já antecipado na entrada é abatido
         ws.cell(r, COL['ICMS_S']).value = (
-            f"=IF({G}{r}>0,0,ROUND({W}{r}*{Rc}$2,2))"
+            f"=IF({G}{r}>0,0,MAX(0,ROUND({W}{r}*{Rc}$2,2)-{H}{r}))"
         )
 
         # S - CUSTO SAÍDA = C_ENT + FED + CART + ICMS
@@ -646,9 +664,10 @@ def salvar_excel_estilizado(dados, path):
         # AB - CARTÃO ATC = P_ATC × CART%
         ws.cell(r, COL['CART_ATC']).value = f"=ROUND({Za}{r}*{Qc}$2,2)"
 
-        # AC - ICMS ATC = NF_ATC × ICM%  (0 se ST — ICMS já recolhido pelo substituto)
+        # AC - ICMS ATC = max(0, NF_ATC × ICM% − ANT_U)
+        # ST zera tudo; ANT reduz — mesma lógica do varejo
         ws.cell(r, COL['ICM_ATC']).value = (
-            f"=IF({G}{r}>0,0,ROUND({Ya}{r}*{Rc}$2,2))"
+            f"=IF({G}{r}>0,0,MAX(0,ROUND({Ya}{r}*{Rc}$2,2)-{H}{r}))"
         )
 
         # AD - CUSTO SAÍDA ATC = C_ENT + FED_ATC + CART_ATC + ICM_ATC
@@ -705,7 +724,7 @@ def salvar_excel_estilizado(dados, path):
             cell.alignment = ALI_CTR
 
         # ── Cores ─────────────────────────────────────────────────────────────
-        _skip = {COL['AUDIT_SYS'], COL['AUDIT_EMB'], COL['META'], COL['CRED']}
+        _skip = {COL['AUDIT_SYS'], COL['AUDIT_EMB'], COL['AUDIT_CRED'], COL['META'], COL['CRED']}
         if has_st:
             # ST: peach em toda a linha, sem exceção
             for c in range(1, TOTAL_COLS + 1):
@@ -770,6 +789,7 @@ def salvar_excel_estilizado(dados, path):
         27:12, 28:11, 29:10,
         30:15, 31:12,
         32:14, 33:14, 34:14, 35:9,
+        36:10,
     }
     for c, w in widths.items():
         ws.column_dimensions[L(c)].width = w

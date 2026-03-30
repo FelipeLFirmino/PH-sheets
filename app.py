@@ -49,7 +49,8 @@ def _calcular(row, P):
 
     fed    = round(p_var * P['fed'],    2)
     cartao = round(p_var * P['cartao'], 2)
-    icms_s = 0.0 if st_u > 0.005 else round(p_var * P['icm'], 2)
+    # ANT reduz o ICMS da saída: o valor já antecipado na entrada é abatido
+    icms_s = 0.0 if st_u > 0.005 else max(0.0, round(p_var * P['icm'], 2) - ant_u)
     c_saida = round(c_ent + fed + cartao + icms_s, 2)
     p_min  = round(c_saida / (1 - meta), 2) if meta > 0 and c_saida > 0 else 0.0
     margem = round((p_var - c_saida) / p_var, 4) if p_var > 0 else 0.0
@@ -62,7 +63,7 @@ def _calcular(row, P):
     p_atc       = round(p_var * (1 - desc_atc), 2)
     fed_atc     = round(nf_atc * P['fed'], 2)
     cart_atc    = round(p_atc  * P['cartao'], 2)
-    icm_atc     = 0.0 if st_u > 0.005 else round(nf_atc * P['icm'], 2)
+    icm_atc     = 0.0 if st_u > 0.005 else max(0.0, round(nf_atc * P['icm'], 2) - ant_u)
     c_saida_atc = round(c_ent + fed_atc + cart_atc + icm_atc, 2)
     margem_atc  = round((p_atc - c_saida_atc) / p_atc, 4) if p_atc > 0 else 0.0
 
