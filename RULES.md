@@ -210,9 +210,13 @@ Passo 15 — NF ATC (custo atacado)
     nf_atc = ROUND(nf_u × mult_atc, 2)
     ← Multiplicador atacado separado (padrão 1.3 — menor que varejo 2.0)
 
-Passo 16 — PREÇO ATC
-    p_atc = ROUND(p_var × (1 - desc_atc), 2)
-    ← Preço atacado = preço varejo com desconto (padrão 15%)
+Passo 16 — PREÇO ATC PEDIDO
+    p_atc_ped = ROUND(p_var × (1 - desc_atc), 2)
+    ← Desconto para pedidos (padrão 15%)
+
+Passo 16b — PREÇO ATC PDV
+    p_atc_pdv = ROUND(p_var × (1 - desc_atc_pdv), 2)
+    ← Desconto para venda presencial no balcão (padrão 10%)
 
 Passo 17 — FEDERAL ATC
     fed_atc = ROUND(nf_atc × fed%, 2)
@@ -247,21 +251,48 @@ A API retorna uma lista de itens por NF. Cada item tem:
 - `descricaoProduto` — descrição do produto no sistema SEFAZ
 - `tipoImposto` — `'ST'` ou `'ANT'`
 - `valorIcmsCalculado` — valor principal do imposto
-- `valorFecoepCalculado` — fundo de combate à pobreza (soma com ICMS)
+- `valorFecoepCalculado` — Fundo de Combate e Erradicação da Pobreza (FECOEP, alíquota 1%)
 
-O valor total do imposto por item = `valorIcmsCalculado + valorFecoepCalculado`.
+### 5.2 Como combinar XML × API (função `merge_impostos_api`)
 
-### 5.2 Matching produto XML × item API
+Esta é a regra mais crítica do processamento SEFAZ — errar aqui gera double-counting.
 
-O matching atual usa substring: `api_desc IN desc_xml`. Isso é frágil — uma descrição curta da API pode bater em produto errado.
+| tipoImposto | O que está no XML | O que a API acrescenta |
+|-------------|-------------------|------------------------|
+| `'ST'`  | `vICMSST` = ICMS-ST completo | `valorIcmsCalculado` **já está no XML** — NÃO somar. Apenas `valorFecoepCalculado` é adicional. |
+| `'ANT'` | `vICMSST` = 0 (zero) | `valorIcmsCalculado + valorFecoepCalculado` — somar tudo para `vANT`. |
+
+```python
+# CORRETO — implementado em merge_impostos_api()
+if tipoImposto == 'ANT':
+    v_ant += v_icms + v_fecoep        # XML tem zero → tudo vem da API
+else:  # ST
+    v_st_fecoep += v_fecoep           # ICMS já no XML → só FECOEP é novo
+
+vST  = v_st_xml + v_st_fecoep        # XML ICMS + FECOEP da API
+vANT = v_ant                          # tudo da API
+
+# ERRADO — double-counting (bug corrigido em 2026-04-06)
+# vST = v_st_xml + (v_icms_api + v_fecoep_api)  ← dobrava o ICMS-ST
+```
+
+> **Incidente NF 13215 (2026-03-09):** Produtos ST com `vICMSST ≈ R$288` recebiam
+> `st_u ≈ R$1,65` numa unidade de `R$2,25` (≈73%) porque o ICMS era somado duas vezes.
+> Após o fix: `st_u ≈ R$0,85` (FECOEP = R$16,86 / 360 un.), ratio ≈38% — correto para
+> produtos de cosméticos/higiene com MVA de 58%.
+
+### 5.3 Matching produto XML × item API
+
+O matching usa substring: `api_desc IN desc_xml`. A API retorna a descrição do produto exatamente como está cadastrada no sistema SEFAZ, que costuma ser um prefixo da descrição do XML.
 
 **Regra:** Se um produto receber `ant_u > 0` mas o usuário confirmar que não é ANT, o matching da API pode estar errado. Verificar com o log de terminal se a `api_desc` realmente corresponde ao produto.
 
-### 5.3 Falha da API
+### 5.4 Falha da API
 
 A API tem timeout de 10s. Se falhar:
-- `v_st_api = 0`, `v_ant_api = 0`
-- O processamento continua usando apenas `vICMSST` do XML
+- `vST = vICMSST` do XML (FECOEP não é somado — aceitável como fallback)
+- `vANT = 0`
+- O processamento continua normalmente
 - **Nunca** abortar por falha da API
 
 ---
@@ -364,7 +395,7 @@ A preview tem **cabeçalho duplo**: a primeira linha agrupa as colunas com rótu
 | 20 — PREÇO MÍN VRJ | Azul `#BDD7EE` + bold | Varejo |
 | 22 — PREÇO VAREJO | Azul `#BDD7EE` + bold | Varejo |
 | 23 — MARGEM | Azul `#BDD7EE` + bold | Varejo |
-| 24–32 — bloco atacado completo | Amarelo `#FFF2CC` + bold | Atacado |
+| 24–33 — bloco atacado completo | Amarelo `#FFF2CC` + bold | Atacado |
 
 > ST e ANT têm prioridade — linha pêssego/verde menta sobrepõe todas as cores de coluna.
 
@@ -373,7 +404,7 @@ A preview tem **cabeçalho duplo**: a primeira linha agrupa as colunas com rótu
 | Cor | Hex | Aplicação |
 |-----|-----|-----------|
 | Azul | `#BDD7EE` | Bloco VAREJO: FEDERAL, CARTÃO, ICMS SAÍDA, CUSTO SAÍDA, PREÇO MÍN VIÁVEL VRJ, PREÇO VAREJO, MARGEM REAL |
-| Amarelo | `#FFF2CC` | Bloco ATACADO completo: NF ATC, FEDERAL ATC, CARTÃO ATC, ICMS ATC, CUSTO SAÍDA ATC, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT |
+| Amarelo | `#FFF2CC` | Bloco ATACADO completo: NF ATC, PREÇO ATC PEDIDO, PREÇO ATC PDV, FEDERAL ATC, CARTÃO ATC, ICMS ATC, CUSTO SAÍDA ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT |
 | Verde menta | `#D1FAE5` | Linha inteira de produto ANT (ant_u > 0.005 e st_u ≤ 0.005) |
 | Verde | `#E2EFDA` | META % (editável por produto — todas as linhas) |
 | Pêssego | `#FCE4D6` | Linha inteira de produto ST (st_u > 0.005) |
@@ -403,6 +434,7 @@ Estas são restrições que o código deve sempre respeitar:
 15. **Crédito de ICMS vem do XML por produto** — pICMS de cada item do XML. Fallback pro parâmetro do formulário se XML não tiver.
 16. **Sem preço real (≤ R$ 0,02), não dividir por embalagem** — p_sys placeholder não permite validar anti-absurdo. EMB=1 é mais seguro.
 17. **Frete CIF = 0%** — se modFrete=0 no XML, o fornecedor paga o frete. Parâmetro do formulário é ignorado.
+18. **API SEFAZ ST não duplica ICMS** — para `tipoImposto='ST'`, `valorIcmsCalculado` já está em `vICMSST` do XML. Apenas `valorFecoepCalculado` é adicionado. Para `tipoImposto='ANT'`, o XML tem zero e toda a soma (ICMS + FECOEP) vai para `vANT`. Ver `merge_impostos_api()` em `processador.py`.
 
 ---
 

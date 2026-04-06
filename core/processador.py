@@ -9,6 +9,9 @@ from openpyxl.utils import get_column_letter
 
 # ─── Padrão embalagem ────────────────────────────────────────────────────────
 # Padrão 1 (original): "CAIXA COM 12", "PCT C/24", "KIT COM 6"
+# ATENÇÃO: CX/N (ex: "CX/4") NÃO é adicionado aqui porque quando uCom=UN na NF
+# a contagem já é por unidade — CX/N é apenas embalagem de transporte.
+# Se um fornecedor emitir com uCom=CX, a divisão deve ser feita na leitura do XML.
 _PATTERN_EMB_EXPLICITO = re.compile(
     r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+)',
     re.IGNORECASE
@@ -48,13 +51,14 @@ _PATTERN_EMB_DS = re.compile(
 #  10. P_MIN   = C_SAIDA ÷ (1 − META%)
 #
 # FLUXO ATACADO:
-#  11. NF_ATC     = NF_U × MULT_ATC          (parâm col 25 linha 2)
-#  12. P_ATC      = P_VAR × (1 − DESC_ATC%)  (parâm col 26 linha 2)
-#  13. FED_ATC    = NF_ATC × FED%
-#  14. CART_ATC   = P_ATC × CART%
-#  15. ICM_ATC    = NF_ATC × ICM%
-#  16. C_SAIDA_ATC= C_ENT + FED_ATC + CART_ATC + ICM_ATC
-#  17. MARGEM_ATC = (P_ATC − C_SAIDA_ATC) / P_ATC
+#  11. NF_ATC      = NF_U × MULT_ATC           (parâm col 25 linha 2)
+#  12. P_ATC_PED   = P_VAR × (1 − DESC_PED%)   (parâm col 26 linha 2 — pedido, 15%)
+#  13. P_ATC_PDV   = P_VAR × (1 − DESC_PDV%)   (parâm col 27 linha 2 — balcão, 10%)
+#  14. FED_ATC     = NF_ATC × FED%
+#  15. CART_ATC    = P_ATC_PED × CART%
+#  16. ICM_ATC     = NF_ATC × ICM%
+#  17. C_SAIDA_ATC = C_ENT + FED_ATC + CART_ATC + ICM_ATC
+#  18. MARGEM_ATC  = (P_ATC_PED − C_SAIDA_ATC) / P_ATC_PED
 #
 # A  B     C    D    E    F      G     H      I      J      K      L
 # NF DESC  REF  SKU  QTD  NF_U   ST_U  ANT_U  IPI_U  C_REAL FRETE  DESP
@@ -64,12 +68,12 @@ _PATTERN_EMB_DS = re.compile(
 # CRED   CST  C_ENT  FED    CART   ICMS_S  C_SAIDA META  P_MIN  P_ATUAL P_VAR  MARGEM
 # 13     14   15     16     17     18      19      20    21     22      23     24
 #
-# Y       Z      AA       AB        AC      AD           AE         AF          AG            AH         AI
-# NF_ATC  P_ATC  FED_ATC  CART_ATC  ICM_ATC C_SAIDA_ATC  MARGEM_ATC P_PCT_ATC   P_COMPRA_PCT  AUDIT_SYS  AUDIT_EMB
-# 25      26     27       28        29      30           31         32          33            34         35
+# Y       Z          AA         AB       AC        AD      AE             AF             AG         AH            AI         AJ         AK         AL
+# NF_ATC  P_ATC_PED  P_ATC_PDV  FED_ATC  CART_ATC  ICM_ATC C_SAIDA_ATC  MARGEM_ATC_PED MARGEM_ATC_PDV P_PCT_ATC P_COMPRA_PCT AUDIT_SYS  AUDIT_EMB  AUDIT_CRED
+# 25      26         27         28       29        30      31             32             33             34        35           36         37         38
 #
-# P_PCT_ATC    = P_ATC × QTD_EMB  → preço de venda do pacote no atacado (com desconto)
-# P_COMPRA_PCT = NF_U  × QTD_EMB  → preço de compra do pacote (custo NF por caixa)
+# P_PCT_ATC    = P_ATC_PED × QTD_EMB  → preço do pacote no atacado pedido
+# P_COMPRA_PCT = NF_U      × QTD_EMB  → preço de compra do pacote (custo NF por caixa)
 
 COL = {
     'NF': 1, 'DESC': 2, 'REF': 3, 'SKU': 4, 'QTD': 5,
@@ -79,15 +83,17 @@ COL = {
     'FED': 16, 'CARTAO': 17, 'ICMS_S': 18, 'C_SAIDA': 19,
     'META': 20, 'P_MIN': 21,
     'P_ATUAL': 22, 'P_VAR': 23, 'MARGEM': 24,
-    'NF_ATC': 25, 'P_ATC': 26,
-    'FED_ATC': 27, 'CART_ATC': 28, 'ICM_ATC': 29,
-    'C_SAIDA_ATC': 30, 'MARGEM_ATC': 31,
-    'P_PCT_ATC': 32,
-    'P_COMPRA_PCT': 33,
-    'AUDIT_SYS': 34, 'AUDIT_EMB': 35,
-    'AUDIT_CRED': 36,  # taxa de crédito ICMS por produto (colorida por origem, editável)
+    'NF_ATC': 25, 'P_ATC_PED': 26, 'P_ATC_PDV': 27,
+    'FED_ATC': 28, 'CART_ATC': 29, 'ICM_ATC': 30,
+    'C_SAIDA_ATC': 31,
+    'MARGEM_ATC_PED': 32,  # margem sobre preço pedido (15% desc)
+    'MARGEM_ATC_PDV': 33,  # margem sobre preço PDV balcão (10% desc)
+    'P_PCT_ATC': 34,
+    'P_COMPRA_PCT': 35,
+    'AUDIT_SYS': 36, 'AUDIT_EMB': 37,
+    'AUDIT_CRED': 38,  # taxa de crédito ICMS por produto (colorida por origem, editável)
 }
-TOTAL_COLS = 36
+TOTAL_COLS = 38
 
 # ─── Paleta de cores por % de crédito ICMS ───────────────────────────────────
 # Usada na coluna CRED do Excel e na prévia HTML
@@ -166,6 +172,34 @@ def get_xml_text(node, xpath, ns, default=""):
     return default
 
 
+def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple:
+    """
+    Combina vICMSST do XML com os dados da API SEFAZ AL por produto.
+
+    Regra:
+    - tipoImposto='ST': API valorIcmsCalculado já está em vICMSST do XML.
+      Adiciona apenas valorFecoepCalculado (FECOEP não está no XML).
+    - tipoImposto='ANT': XML tem zero. Adiciona ICMS + FECOEP completos da API.
+
+    Returns: (vST_total, vANT_total)
+    """
+    v_st_fecoep = 0.0
+    v_ant       = 0.0
+    desc_upper  = desc_xml.strip().upper()
+    for item in dados_api:
+        api_desc = str(item.get('descricaoProduto', '')).strip().upper()
+        if api_desc not in desc_upper:
+            continue
+        v_icms   = float(item.get('valorIcmsCalculado',  0) or 0)
+        v_fecoep = float(item.get('valorFecoepCalculado', 0) or 0)
+        if item.get('tipoImposto') == 'ANT':
+            v_ant += v_icms + v_fecoep
+        else:
+            # ST: ICMS já contabilizado em vICMSST do XML — só soma FECOEP
+            v_st_fecoep += v_fecoep
+    return v_st_xml + v_st_fecoep, v_ant
+
+
 def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult):
     # Padrão 1 — explícito: "CAIXA COM N", "PCT C/N", "KIT COM N"
     match = _PATTERN_EMB_EXPLICITO.search(desc_xml)
@@ -226,8 +260,9 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
         P_FED      = float(params.get('fed',       9.13)) / 100
         P_ICM      = float(params.get('icm',       21))   / 100
         P_CART     = float(params.get('cartao',    4))    / 100
-        P_MULT_ATC = float(params.get('mult_atc',  1.3))
-        P_DESC_ATC = float(params.get('desc_atc',  15))   / 100
+        P_MULT_ATC     = float(params.get('mult_atc',      1.3))
+        P_DESC_ATC     = float(params.get('desc_atc',      15))  / 100  # pedido
+        P_DESC_ATC_PDV = float(params.get('desc_atc_pdv',  10))  / 100  # PDV balcão
 
         tree = ET.parse(xml_path)
         ns = {'nfe': 'http://www.portalfiscal.inf.br/nfe'}
@@ -280,19 +315,20 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
             desc_xml = get_xml_text(p, 'nfe:xProd', ns, "SEM DESCRICAO")
             v_st_xml = float(get_xml_text(i, './/nfe:vICMSST', ns, "0"))
 
-            v_st_api, v_ant_api = 0.0, 0.0
+            vST_total, v_ant_api = merge_impostos_api(v_st_xml, desc_xml, dados_api)
+
+            # Log detalhado para diagnóstico
             matches_log = []
             for item in dados_api:
                 api_desc = str(item.get('descricaoProduto', '')).strip().upper()
                 if api_desc in desc_xml.strip().upper():
-                    vt = (float(item.get('valorIcmsCalculado', 0) or 0)
-                          + float(item.get('valorFecoepCalculado', 0) or 0))
+                    v_icms   = float(item.get('valorIcmsCalculado',  0) or 0)
+                    v_fecoep = float(item.get('valorFecoepCalculado', 0) or 0)
                     tipo = item.get('tipoImposto')
-                    if tipo == 'ANT':
-                        v_ant_api += vt
-                    else:
-                        v_st_api += vt
-                    matches_log.append(f"tipo={tipo!r} valor={vt:.4f} api_desc={api_desc[:40]!r}")
+                    matches_log.append(
+                        f"tipo={tipo!r} icms={v_icms:.4f} fecoep={v_fecoep:.4f} "
+                        f"api_desc={api_desc[:40]!r}"
+                    )
 
             print(f"[PRODUTO] {desc_xml[:60]!r}")
             print(f"  vICMSST (XML) = {v_st_xml:.4f}")
@@ -302,8 +338,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                     print(f"    → {ml}")
             else:
                 print(f"  matches SEFAZ API: nenhum")
-            print(f"  v_st_api={v_st_api:.4f}  v_ant_api={v_ant_api:.4f}  "
-                  f"vST_total={v_st_xml + v_st_api:.4f}")
+            print(f"  vST_total={vST_total:.4f}  v_ant_api={v_ant_api:.4f}")
 
             cst = ""
             p_icms_xml = 0.0
@@ -331,7 +366,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'vUnCom':   float(get_xml_text(p, 'nfe:vUnCom', ns, "0")),
                 'vProd':    float(get_xml_text(p, 'nfe:vProd',  ns, "0")),
                 'vIPI':     float(get_xml_text(i, './/nfe:vIPI', ns, "0")),
-                'vST':      v_st_xml + v_st_api,
+                'vST':      vST_total,
                 'vANT':     v_ant_api,
                 'nf_base':  num_nf,
                 'cst':      cst,
@@ -421,7 +456,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
         params_out = {
             'mult': P_MULT, 'frete': P_FRETE, 'desp': P_DESP,
             'cred': P_CRED, 'fed': P_FED, 'icm': P_ICM, 'cartao': P_CART,
-            'mult_atc': P_MULT_ATC, 'desc_atc': P_DESC_ATC,
+            'mult_atc': P_MULT_ATC, 'desc_atc': P_DESC_ATC, 'desc_atc_pdv': P_DESC_ATC_PDV,
         }
         return True, (rows, params_out, num_nf)
 
@@ -479,12 +514,12 @@ def salvar_excel_estilizado(dados, path):
         'FEDERAL', 'CARTÃO', 'ICMS SAÍDA', 'CUSTO SAÍDA',
         'META %', 'PREÇO MÍN VIÁVEL VRJ',
         'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM REAL',
-        'NF ATC', 'PREÇO ATC',
+        'NF ATC', 'PREÇO ATC PEDIDO', 'PREÇO ATC PDV',
         'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC',
-        'CUSTO SAÍDA ATC', 'MARGEM ATC',
+        'CUSTO SAÍDA ATC', 'MARGEM ATC PED', 'MARGEM ATC PDV',
         'PREÇO PCT ATC', 'P. COMPRA PCT',
         'P.UNIT SISTEMA', 'QTD EMB',
-        'TAXA CRED',  # col 36 — taxa de crédito ICMS por produto (colorida por origem)
+        'TAXA CRED',  # col 38 — taxa de crédito ICMS por produto (colorida por origem)
     ]
     for c, h in enumerate(headers, 1):
         _c(ws, 1, c, h, fill=F_PARAM, bold=True)
@@ -494,8 +529,8 @@ def salvar_excel_estilizado(dados, path):
         ws.cell(1, COL[col_key]).fill = F_AZUL
 
     # Cabeçalhos atacado em amarelo
-    for col_key in ('NF_ATC', 'P_ATC', 'FED_ATC', 'CART_ATC', 'ICM_ATC',
-                    'C_SAIDA_ATC', 'MARGEM_ATC', 'P_PCT_ATC', 'P_COMPRA_PCT'):
+    for col_key in ('NF_ATC', 'P_ATC_PED', 'P_ATC_PDV', 'FED_ATC', 'CART_ATC', 'ICM_ATC',
+                    'C_SAIDA_ATC', 'MARGEM_ATC_PED', 'MARGEM_ATC_PDV', 'P_PCT_ATC', 'P_COMPRA_PCT'):
         ws.cell(1, COL[col_key]).fill = F_AMAR
 
     # ── Linha 2: Parâmetros ──────────────────────────────────────────────────
@@ -508,10 +543,12 @@ def salvar_excel_estilizado(dados, path):
         COL['FED']:     P['fed'],        # col 16
         COL['CARTAO']:  P['cartao'],     # col 17
         COL['ICMS_S']:  P['icm'],        # col 18
-        COL['NF_ATC']:  P['mult_atc'],   # col 25 — multiplicador atacado
-        COL['P_ATC']:   P['desc_atc'],   # col 26 — desconto atacado
+        COL['NF_ATC']:    P['mult_atc'],      # col 25 — multiplicador atacado
+        COL['P_ATC_PED']: P['desc_atc'],      # col 26 — desconto pedido (15%)
+        COL['P_ATC_PDV']: P['desc_atc_pdv'],  # col 27 — desconto PDV balcão (10%)
     }
-    pct_cols = {COL['FRETE'], COL['DESP'], COL['CRED'], COL['FED'], COL['CARTAO'], COL['ICMS_S'], COL['P_ATC']}
+    pct_cols = {COL['FRETE'], COL['DESP'], COL['CRED'], COL['FED'], COL['CARTAO'], COL['ICMS_S'],
+                COL['P_ATC_PED'], COL['P_ATC_PDV']}
     for c in range(1, TOTAL_COLS + 1):
         val = param_vals.get(c)
         fmt = '0.00%' if c in pct_cols else ('0.00' if c == COL['C_REAL'] else 'General')
@@ -543,14 +580,16 @@ def salvar_excel_estilizado(dados, path):
         T  = L(COL['META'])       # META %
         V  = L(COL['P_ATUAL'])    # PREÇO ATUAL
         W  = L(COL['P_VAR'])      # PREÇO VAREJO
-        Ya = L(COL['NF_ATC'])     # NF ATC
-        Za = L(COL['P_ATC'])      # PREÇO ATC
+        Ya = L(COL['NF_ATC'])      # NF ATC
+        Za = L(COL['P_ATC_PED'])  # PREÇO ATC PEDIDO
+        Zb = L(COL['P_ATC_PDV'])  # PREÇO ATC PDV
         AA = L(COL['FED_ATC'])    # FEDERAL ATC
         AB = L(COL['CART_ATC'])   # CARTÃO ATC
         AC = L(COL['ICM_ATC'])    # ICMS ATC
-        AD = L(COL['C_SAIDA_ATC'])# CUSTO SAÍDA ATC
-        AE = L(COL['MARGEM_ATC']) # MARGEM ATC
-        AJc = L(COL['AUDIT_CRED'])  # taxa de crédito ICMS por produto
+        AD = L(COL['C_SAIDA_ATC'])      # CUSTO SAÍDA ATC
+        AE = L(COL['MARGEM_ATC_PED'])  # MARGEM ATC PED
+        AF = L(COL['MARGEM_ATC_PDV'])  # MARGEM ATC PDV
+        AJc = L(COL['AUDIT_CRED'])      # taxa de crédito ICMS por produto
 
         # Valores fixos (vêm do XML/CSV)
         _c(ws, r, COL['NF'],    row['nf'])
@@ -664,10 +703,14 @@ def salvar_excel_estilizado(dados, path):
         # Y - NF ATC = NF_U × MULT_ATC
         ws.cell(r, COL['NF_ATC']).value = f"=ROUND({F}{r}*{Ya}$2,2)"
 
-        # Z - PREÇO ATC = P_VAR × (1 − DESC_ATC%)
-        ws.cell(r, COL['P_ATC']).value = f"=ROUND({W}{r}*(1-{Za}$2),2)"
+        # Z - PREÇO ATC PEDIDO = P_VAR × (1 − DESC_PED%)  — desconto pedido (15%)
+        ws.cell(r, COL['P_ATC_PED']).value = f"=ROUND({W}{r}*(1-{Za}$2),2)"
 
-        # AA - FEDERAL ATC = NF_ATC × FED%
+        # AA - PREÇO ATC PDV = P_VAR × (1 − DESC_PDV%)  — desconto balcão (10%)
+        ws.cell(r, COL['P_ATC_PDV']).value = f"=ROUND({W}{r}*(1-{Zb}$2),2)"
+        ws.cell(r, COL['P_ATC_PDV']).number_format = '#,##0.00'
+
+        # AB - FEDERAL ATC = NF_ATC × FED%
         ws.cell(r, COL['FED_ATC']).value = f"=ROUND({Ya}{r}*{P2}$2,2)"
 
         # AB - CARTÃO ATC = P_ATC × CART%
@@ -684,9 +727,14 @@ def salvar_excel_estilizado(dados, path):
             f"=ROUND({M}{r}+{AA}{r}+{AB}{r}+{AC}{r},2)"
         )
 
-        # AE - MARGEM ATC = (P_ATC − C_SAIDA_ATC) / P_ATC
-        ws.cell(r, COL['MARGEM_ATC']).value = (
+        # AE - MARGEM ATC PED = (P_ATC_PED − C_SAIDA_ATC) / P_ATC_PED
+        ws.cell(r, COL['MARGEM_ATC_PED']).value = (
             f"=IF({Za}{r}>0,ROUND(({Za}{r}-{AD}{r})/{Za}{r},4),0)"
+        )
+
+        # AF - MARGEM ATC PDV = (P_ATC_PDV − C_SAIDA_ATC) / P_ATC_PDV
+        ws.cell(r, COL['MARGEM_ATC_PDV']).value = (
+            f"=IF({Zb}{r}>0,ROUND(({Zb}{r}-{AD}{r})/{Zb}{r},4),0)"
         )
 
         AI_emb = L(COL['AUDIT_EMB'])
@@ -715,13 +763,15 @@ def salvar_excel_estilizado(dados, path):
             (COL['P_VAR'],       '#,##0.00'),
             (COL['MARGEM'],      '0.00%'),
             (COL['NF_ATC'],      '#,##0.00'),
-            (COL['P_ATC'],       '#,##0.00'),
+            (COL['P_ATC_PED'],   '#,##0.00'),
+            (COL['P_ATC_PDV'],   '#,##0.00'),
             (COL['FED_ATC'],     '#,##0.00'),
             (COL['CART_ATC'],    '#,##0.00'),
             (COL['ICM_ATC'],     '#,##0.00'),
-            (COL['C_SAIDA_ATC'],   '#,##0.00'),
-            (COL['MARGEM_ATC'],    '0.00%'),
-            (COL['P_PCT_ATC'],     '#,##0.00'),
+            (COL['C_SAIDA_ATC'],     '#,##0.00'),
+            (COL['MARGEM_ATC_PED'], '0.00%'),
+            (COL['MARGEM_ATC_PDV'], '0.00%'),
+            (COL['P_PCT_ATC'],      '#,##0.00'),
             (COL['P_COMPRA_PCT'],  '#,##0.00'),
         ]:
             ws.cell(r, col_idx).number_format = fmt
@@ -738,8 +788,9 @@ def salvar_excel_estilizado(dados, path):
         _azul = {COL['FED'], COL['CARTAO'], COL['ICMS_S'], COL['C_SAIDA'],
                  COL['P_MIN'], COL['P_VAR'], COL['MARGEM']}
         # Colunas ATACADO destacadas em amarelo
-        _amar = {COL['NF_ATC'], COL['P_ATC'], COL['FED_ATC'], COL['CART_ATC'],
-                 COL['ICM_ATC'], COL['C_SAIDA_ATC'], COL['MARGEM_ATC'],
+        _amar = {COL['NF_ATC'], COL['P_ATC_PED'], COL['P_ATC_PDV'], COL['FED_ATC'],
+                 COL['CART_ATC'], COL['ICM_ATC'], COL['C_SAIDA_ATC'],
+                 COL['MARGEM_ATC_PED'], COL['MARGEM_ATC_PDV'],
                  COL['P_PCT_ATC'], COL['P_COMPRA_PCT']}
         if has_st:
             # ST: peach em toda a linha, sem exceção
@@ -797,11 +848,11 @@ def salvar_excel_estilizado(dados, path):
         16:11, 17:10, 18:12, 19:12,
         20:9,  21:16,
         22:12, 23:14, 24:12,
-        25:10, 26:12,
-        27:12, 28:11, 29:10,
-        30:15, 31:12,
-        32:14, 33:14, 34:14, 35:9,
-        36:10,
+        25:10, 26:16, 27:14,
+        28:12, 29:11, 30:10,
+        31:15, 32:12,
+        33:14, 34:14, 35:14, 36:9,
+        37:10,
     }
     for c, w in widths.items():
         ws.column_dimensions[L(c)].width = w
