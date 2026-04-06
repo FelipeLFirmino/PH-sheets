@@ -15,8 +15,9 @@ def P():
         'fed':      0.0913,
         'icm':      0.21,
         'cartao':   0.04,
-        'mult_atc': 1.3,
-        'desc_atc': 0.15,
+        'mult_atc':     1.3,
+        'desc_atc':     0.15,
+        'desc_atc_pdv': 0.10,
     }
 
 
@@ -24,15 +25,16 @@ def P():
 def P_zero():
     """Parâmetros zerados — isola o comportamento sendo testado sem ruído fiscal."""
     return {
-        'mult':     1.0,
-        'frete':    0.0,
-        'desp':     0.0,
-        'cred':     0.0,
-        'fed':      0.0,
-        'icm':      0.0,
-        'cartao':   0.0,
-        'mult_atc': 1.0,
-        'desc_atc': 0.0,
+        'mult':         1.0,
+        'frete':        0.0,
+        'desp':         0.0,
+        'cred':         0.0,
+        'fed':          0.0,
+        'icm':          0.0,
+        'cartao':       0.0,
+        'mult_atc':     1.0,
+        'desc_atc':     0.0,
+        'desc_atc_pdv': 0.0,
     }
 
 

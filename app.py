@@ -57,23 +57,27 @@ def _calcular(row, P):
     lucro  = round((p_var - c_saida) * qtd, 2)
 
     # Atacado
-    mult_atc = P.get('mult_atc', 1.3)
-    desc_atc = P.get('desc_atc', 0.15)
+    mult_atc     = P.get('mult_atc', 1.3)
+    desc_atc     = P.get('desc_atc', 0.15)      # pedido — 15%
+    desc_atc_pdv = P.get('desc_atc_pdv', 0.10)  # PDV balcão — 10%
     nf_atc      = round(nf_u * mult_atc, 2)
-    p_atc       = round(p_var * (1 - desc_atc), 2)
+    p_atc_ped   = round(p_var * (1 - desc_atc), 2)
+    p_atc_pdv   = round(p_var * (1 - desc_atc_pdv), 2)
     fed_atc     = round(nf_atc * P['fed'], 2)
-    cart_atc    = round(p_atc  * P['cartao'], 2)
+    cart_atc    = round(p_atc_ped * P['cartao'], 2)
     icm_atc     = 0.0 if st_u > 0.005 else max(0.0, round(nf_atc * P['icm'], 2) - ant_u)
-    c_saida_atc = round(c_ent + fed_atc + cart_atc + icm_atc, 2)
-    margem_atc  = round((p_atc - c_saida_atc) / p_atc, 4) if p_atc > 0 else 0.0
+    c_saida_atc     = round(c_ent + fed_atc + cart_atc + icm_atc, 2)
+    margem_atc_ped  = round((p_atc_ped - c_saida_atc) / p_atc_ped, 4) if p_atc_ped > 0 else 0.0
+    margem_atc_pdv  = round((p_atc_pdv - c_saida_atc) / p_atc_pdv, 4) if p_atc_pdv > 0 else 0.0
 
     return dict(c_real=c_real, frete=frete, desp=desp, cred=cred,
                 c_ent=c_ent, fed=fed, cartao=cartao, icms_s=icms_s,
                 c_saida=c_saida, p_min=p_min, p_var=p_var, margem=margem,
                 lucro=lucro,
-                nf_atc=nf_atc, p_atc=p_atc, fed_atc=fed_atc,
+                nf_atc=nf_atc, p_atc_ped=p_atc_ped, p_atc_pdv=p_atc_pdv, fed_atc=fed_atc,
                 cart_atc=cart_atc, icm_atc=icm_atc,
-                c_saida_atc=c_saida_atc, margem_atc=margem_atc)
+                c_saida_atc=c_saida_atc,
+                margem_atc_ped=margem_atc_ped, margem_atc_pdv=margem_atc_pdv)
 
 
 if getattr(sys, 'frozen', False):
@@ -131,24 +135,24 @@ def processar():
             'FEDERAL', 'CARTÃO', 'ICMS S.', 'C. SAÍDA',
             'META %', 'PREÇO MÍN VRJ',
             'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM',
-            'NF ATC', 'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
-            'PREÇO ATC', 'MARGEM ATC',
-            'PREÇO PCT ATC', 'P. COMPRA PCT',
+            'NF ATC', 'PREÇO ATC PEDIDO', 'PREÇO ATC PDV',
+            'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
+            'MARGEM ATC PED', 'MARGEM ATC PDV', 'PREÇO PCT ATC', 'P. COMPRA PCT',
         ]
 
         html  = '<table class="table table-sm table-bordered table-hover"><thead>'
         html += '<tr>'
         html += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
         html += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
-        html += '<th colspan="9" style="background:#ede9fe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#5b21b6">ATACADO</th>'
+        html += '<th colspan="11" style="background:#fef9c3;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#92400e">ATACADO</th>'
         html += '</tr><tr>'
         html += ''.join(f'<th>{h}</th>' for h in col_headers)
         html += '</tr></thead><tbody>'
 
         # idx 0-based: 15=FEDERAL 16=CARTÃO 17=ICMS S. 18=C.SAÍDA 20=PREÇO MÍN VRJ 22=P.VAREJO 23=MARGEM
         _AZUL = {15, 16, 17, 18, 20, 22, 23}
-        # idx 24-32: todo o bloco atacado
-        _AMAR = set(range(24, 33))
+        # idx 24-34: todo o bloco atacado (NF ATC até P. COMPRA PCT)
+        _AMAR = set(range(24, 35))
 
         for row, m in zip(rows[:20], metricas[:20]):
             has_st  = row['tem_st']
@@ -182,14 +186,16 @@ def processar():
                 f"R$ {m['p_var']:.2f}",
                 f"{m['margem']*100:.1f}%",
                 f"R$ {m['nf_atc']:.2f}",
+                f"R$ {m['p_atc_ped']:.2f}",
+                f"R$ {m['p_atc_pdv']:.2f}",
                 f"R$ {m['fed_atc']:.2f}",
                 f"R$ {m['cart_atc']:.2f}",
                 f"R$ {m['icm_atc']:.2f}",
                 f"R$ {m['c_saida_atc']:.2f}",
-                f"R$ {m['p_atc']:.2f}",
-                f"{m['margem_atc']*100:.1f}%",
-                f"R$ {round(m['p_atc'] * row['qtd_emb'], 2):.2f}",        # 31 PREÇO PCT ATC
-                f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",       # 32 P. COMPRA PCT
+                f"{m['margem_atc_ped']*100:.1f}%",
+                f"{m['margem_atc_pdv']*100:.1f}%",
+                f"R$ {round(m['p_atc_ped'] * row['qtd_emb'], 2):.2f}",   # PREÇO PCT ATC
+                f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",      # P. COMPRA PCT
             ]
 
             for idx, val in enumerate(cells):

@@ -248,7 +248,7 @@ A prévia é gerada em `app.py` como HTML inline com **cabeçalho duplo**:
 | 21 | PREÇO ATUAL | sem cor |
 | 22 | PREÇO VAREJO | Azul `#BDD7EE` bold |
 | 23 | MARGEM | Azul `#BDD7EE` bold |
-| 24–32 | NF ATC, FEDERAL ATC, CARTÃO ATC, ICMS ATC, C. SAÍDA ATC, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT | Amarelo `#FFF2CC` bold |
+| 24–33 | NF ATC, PREÇO ATC PEDIDO, PREÇO ATC PDV, FEDERAL ATC, CARTÃO ATC, ICMS ATC, C. SAÍDA ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT | Amarelo `#FFF2CC` bold |
 
 > Linhas ST → pêssego `#FCE4D6` em tudo. Linhas ANT → verde menta `#D1FAE5` em tudo. As cores acima só se aplicam a linhas normais.
 
@@ -296,7 +296,7 @@ Lista todos os produtos com `p_atual <= 0` — esses usarão o preço calculado 
 | Cor | Hex | Aplicação |
 |-----|-----|-----------|
 | Azul | `#BDD7EE` | Bloco VAREJO: FEDERAL, CARTÃO, ICMS SAÍDA, CUSTO SAÍDA, PREÇO MÍN VIÁVEL VRJ, PREÇO VAREJO, MARGEM REAL |
-| Amarelo claro | `#FFF2CC` | Bloco ATACADO completo: NF ATC, FEDERAL ATC, CARTÃO ATC, ICMS ATC, CUSTO SAÍDA ATC, PREÇO ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT |
+| Amarelo claro | `#FFF2CC` | Bloco ATACADO completo: NF ATC, PREÇO ATC PEDIDO, PREÇO ATC PDV, FEDERAL ATC, CARTÃO ATC, ICMS ATC, CUSTO SAÍDA ATC, MARGEM ATC, PREÇO PCT ATC, P. COMPRA PCT |
 | Verde menta | `#D1FAE5` | Linha inteira de produto com ANT > 0 e ST = 0 |
 | Verde | `#E2EFDA` | META % (editável por produto) |
 | Pêssego | `#FCE4D6` | Linha inteira de produto com ST > 0 |

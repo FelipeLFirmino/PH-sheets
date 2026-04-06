@@ -236,18 +236,49 @@ class TestAtacado:
         m = _calcular(row, P_zero)
         assert m['nf_atc'] == pytest.approx(15.0)  # 10 * 1.5
 
-    def test_p_atc_formula(self, P_zero):
+    def test_p_atc_ped_formula(self, P_zero):
         P_zero['desc_atc'] = 0.20
         row = make_row(nf_u=10.0, p_atual=20.0)
         m = _calcular(row, P_zero)
-        assert m['p_atc'] == pytest.approx(16.0)  # 20 * (1 - 0.20)
+        assert m['p_atc_ped'] == pytest.approx(16.0)  # 20 * (1 - 0.20)
 
-    def test_margem_atc_formula(self, P_zero):
-        P_zero['desc_atc'] = 0.0   # sem desconto → p_atc = p_var
-        # cred_pct=0.0 → c_ent=5.0 → c_saida_atc=5.0 → margem_atc=0.5
+    def test_p_atc_pdv_formula(self, P_zero):
+        """PREÇO ATC PDV usa desc_atc_pdv (padrão 10%)."""
+        P_zero['desc_atc_pdv'] = 0.10
+        row = make_row(nf_u=10.0, p_atual=20.0)
+        m = _calcular(row, P_zero)
+        assert m['p_atc_pdv'] == pytest.approx(18.0)  # 20 * (1 - 0.10)
+
+    def test_p_atc_pdv_independente_de_ped(self, P_zero):
+        """PDV e PEDIDO podem ter descontos diferentes no mesmo produto."""
+        P_zero['desc_atc']     = 0.15
+        P_zero['desc_atc_pdv'] = 0.05
+        row = make_row(nf_u=10.0, p_atual=20.0)
+        m = _calcular(row, P_zero)
+        assert m['p_atc_ped'] == pytest.approx(17.0)  # 20 * 0.85
+        assert m['p_atc_pdv'] == pytest.approx(19.0)  # 20 * 0.95
+
+    def test_margem_atc_ped_formula(self, P_zero):
+        P_zero['desc_atc'] = 0.0   # sem desconto → p_atc_ped = p_var
+        # cred_pct=0.0 → c_ent=5.0 → c_saida_atc=5.0 → margem_atc_ped=0.5
         row = make_row(nf_u=5.0, p_atual=10.0, cred_pct=0.0)
         m = _calcular(row, P_zero)
-        assert m['margem_atc'] == pytest.approx(0.5)
+        assert m['margem_atc_ped'] == pytest.approx(0.5)
+
+    def test_margem_atc_pdv_formula(self, P_zero):
+        P_zero['desc_atc_pdv'] = 0.0   # sem desconto → p_atc_pdv = p_var
+        # cred_pct=0.0 → c_ent=5.0 → c_saida_atc=5.0 → margem_atc_pdv=0.5
+        row = make_row(nf_u=5.0, p_atual=10.0, cred_pct=0.0)
+        m = _calcular(row, P_zero)
+        assert m['margem_atc_pdv'] == pytest.approx(0.5)
+
+    def test_margem_atc_pdv_maior_que_ped(self, P_zero):
+        """PDV tem menor desconto → preço mais alto → margem maior que PED."""
+        P_zero['desc_atc']     = 0.20   # 20% desc pedido
+        P_zero['desc_atc_pdv'] = 0.10   # 10% desc PDV
+        row = make_row(nf_u=5.0, p_atual=10.0, cred_pct=0.0)
+        m = _calcular(row, P_zero)
+        assert m['margem_atc_pdv'] > m['margem_atc_ped']
 
     def test_c_saida_atc_usa_c_ent_varejo(self, P_zero):
         """c_saida_atc usa o mesmo c_ent do varejo (custo de entrada é igual)."""
