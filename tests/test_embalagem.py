@@ -19,7 +19,7 @@ from core.processador import extrair_qtd_embalagem
 
 class TestPadraoExplicito:
     """
-    Padrão 1: r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\\s*C/|CX\\s*C/|C/)\\s*(\\d+)'
+    Padrão 1: r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\\s*C/|CX\\s*C/|CX/|C/)\\s*(\\d+)'
     Suficientemente explícito para dispensar o anti-absurdo de preço.
     """
 
@@ -47,6 +47,29 @@ class TestPadraoExplicito:
     def test_um_nao_retorna_1(self):
         # qtd detectada = 1 → retorna 1 sem multiplicar
         assert extrair_qtd_embalagem("CAIXA COM 1 PRODUTO", 10.0, 20.0, 2.0) == 1
+
+    # --- CX/N (KEHOME) — NÃO divide quando uCom=UN na NF ---
+    # Quando a NF emite uCom=UN, a NF_U já é por unidade; CX/N é só embalagem de transporte.
+    # Ex: "TACA 6PCS CX/4" com qCom=8 UN vUnCom=R$9.66 → 8 conjuntos a R$9.66 (não dividir por 4).
+
+    def test_cx_slash_nao_detectado_ucom_un(self):
+        # uCom=UN → NF_U já é por unidade → qtd_emb=1 (sem divisão)
+        # Testar com NF_U=9.66 CX/4: se dividisse, daria R$2.41 (errado para uCom=UN)
+        assert extrair_qtd_embalagem(
+            "88002-TACA COQUETEL DIAMOND 310ML 6PCS CX/4", 9.6625, 0.01, 2.0
+        ) == 1
+
+    def test_6pcs_nao_detectado(self):
+        # "6PCS" no meio da descrição = peças do produto, não embalagem
+        assert extrair_qtd_embalagem("TACA 310ML 6PCS UNITARIA", 9.0, 0.01, 2.0) == 1
+
+    def test_caneca_cx48_ucom_un_nao_divide(self):
+        # uCom=UN, qCom=48 canecas: NF_U=R$1.96/caneca individual, não por caixa.
+        # Anti-absurdo #2 também protegeria (1.96/48=R$0.04 < R$0.10), mas a lógica
+        # principal é que CX/48 aqui é info de transporte, não divisor.
+        assert extrair_qtd_embalagem(
+            "88109-CANECA PERSONALIZADA VOVO 380ML CX/48", 1.959, 0.01, 2.0
+        ) == 1
 
 
 # ─── Padrão 2 — Número no início ("12 CANECAS") ──────────────────────────────
