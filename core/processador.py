@@ -8,12 +8,18 @@ from openpyxl.styles import PatternFill, Border, Side, Alignment, Font
 from openpyxl.utils import get_column_letter
 
 # ─── Padrão embalagem ────────────────────────────────────────────────────────
-# Padrão 1 (original): "CAIXA COM 12", "PCT C/24", "KIT COM 6"
-# ATENÇÃO: CX/N (ex: "CX/4") NÃO é adicionado aqui porque quando uCom=UN na NF
-# a contagem já é por unidade — CX/N é apenas embalagem de transporte.
-# Se um fornecedor emitir com uCom=CX, a divisão deve ser feita na leitura do XML.
-_PATTERN_EMB_EXPLICITO = re.compile(
-    r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+)',
+# Padrão 1a — ESPECÍFICO (alta prioridade): "CAIXA COM 12", "CX C/120", "PCT C/24"
+# Separado do C/ genérico para evitar que "CONJUNTO C/ 03 PCS... CX C/120"
+# capture o 3 em vez do 120 — re.search retorna a primeira ocorrência.
+_PATTERN_EMB_ESPECIFICO = re.compile(
+    r'(?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/)\s*(\d+)',
+    re.IGNORECASE
+)
+
+# Padrão 1b — GENÉRICO (baixa prioridade): "C/5", "C/ 12"
+# Só é tentado se nenhum padrão mais específico encontrou match.
+_PATTERN_EMB_GENERICO = re.compile(
+    r'C/\s*(\d+)',
     re.IGNORECASE
 )
 
@@ -33,6 +39,14 @@ _PATTERN_EMB_FINAL = re.compile(
 # DS = Display; o número após o traço final é a quantidade da embalagem
 _PATTERN_EMB_DS = re.compile(
     r'^DS\b.*-\s*(\d+)\s*(?:PCS)?\s*$',
+    re.IGNORECASE
+)
+
+# Padrão 5 (IP-N): "IP-18 TRB", "IP-120 TRB"
+# Convenção de fornecedores (ex: Affinity Trade): "Itens por Pacote"
+# Presente no NOME do sistema mas ausente no XML (descrição truncada).
+_PATTERN_EMB_IP = re.compile(
+    r'\bIP-(\d+)\b',
     re.IGNORECASE
 )
 
@@ -200,9 +214,21 @@ def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple
     return v_st_xml + v_st_fecoep, v_ant
 
 
-def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult):
-    # Padrão 1 — explícito: "CAIXA COM N", "PCT C/N", "KIT COM N"
-    match = _PATTERN_EMB_EXPLICITO.search(desc_xml)
+def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult, desc_sys=''):
+    # Padrão 0 — "IP-N" (itens por pacote): "IP-18 TRB", "IP-120 TRB"
+    # Tentado primeiro em ambas as descrições (XML e sistema) pois é inequívoco.
+    # Útil quando o XML está truncado e o count só aparece no NOME do sistema.
+    for desc in (desc_xml, desc_sys or ''):
+        m0 = _PATTERN_EMB_IP.search(desc)
+        if m0:
+            qtd = int(m0.group(1))
+            if qtd > 1 and v_un_xml / qtd >= 0.10:
+                return qtd
+
+    # Padrão 1a — específico (alta prioridade): "CAIXA COM N", "CX C/N", "PCT C/N"
+    # Tentado ANTES do genérico C/ para evitar que "CONJUNTO C/ 03... CX C/120"
+    # capture o 3 em vez do 120.
+    match = _PATTERN_EMB_ESPECIFICO.search(desc_xml)
     if match:
         qtd = int(match.group(1))
         padrao_explicito = True
@@ -225,7 +251,13 @@ def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult):
                     qtd = int(match4.group(1))
                     padrao_explicito = True
                 else:
-                    return 1
+                    # Padrão 1b — genérico (baixa prioridade): "C/5", "C/ 12"
+                    match5 = _PATTERN_EMB_GENERICO.search(desc_xml)
+                    if match5:
+                        qtd = int(match5.group(1))
+                        padrao_explicito = True
+                    else:
+                        return 1
 
     if qtd <= 1:
         return 1
@@ -386,27 +418,45 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
         df_sys.loc[:, 'ean_sys']   = df_sys['BARRA'].apply(limpar_str)      if 'BARRA'      in df_sys.columns else ''
         df_sys.loc[:, 'ref_sys']   = df_sys['REFERÊNCIA'].apply(limpar_str) if 'REFERÊNCIA' in df_sys.columns else ''
         df_sys.loc[:, 'preco_sys'] = df_sys['PREÇO'].apply(limpar_preco)    if 'PREÇO'      in df_sys.columns else 0.0
+        # NOME do sistema: fallback para detectar padrões de embalagem ausentes no XML truncado
+        df_sys.loc[:, 'nome_sys']  = df_sys['NOME'].apply(limpar_str)        if 'NOME'       in df_sys.columns else ''
 
         # Merge por EAN
-        df_base = pd.merge(df_xml, df_sys[['ean_sys', 'ref_sys', 'preco_sys']],
+        df_base = pd.merge(df_xml, df_sys[['ean_sys', 'ref_sys', 'preco_sys', 'nome_sys']],
                            left_on='ean_xml', right_on='ean_sys', how='left')
 
-        # Fallback por REF
+        # Fallback 1 — por REF (cProd do XML == REFERÊNCIA do CSV)
         mask = (df_base['preco_sys'].isna()) | (df_base['preco_sys'] == 0)
         if mask.any():
             uniq  = df_sys.drop_duplicates(subset=['ref_sys']).dropna(subset=['ref_sys'])
             mp    = uniq.set_index('ref_sys')['preco_sys'].to_dict()
             me    = uniq.set_index('ref_sys')['ean_sys'].to_dict()
+            mn    = uniq.set_index('ref_sys')['nome_sys'].to_dict()
             df_base.loc[mask, 'preco_sys'] = df_base.loc[mask, 'ref_xml'].map(mp)
             df_base.loc[mask, 'ean_sys']   = df_base.loc[mask, 'ref_xml'].map(me)
+            df_base.loc[mask, 'nome_sys']  = df_base.loc[mask, 'ref_xml'].map(mn)
+
+        # Fallback 2 — cProd como EAN (cProd do XML == BARRA do CSV)
+        # Fornecedores que colocam o GTIN em cProd e deixam cEAN="SEM GTIN" (ex: Mohnish)
+        mask = (df_base['preco_sys'].isna()) | (df_base['preco_sys'] == 0)
+        if mask.any():
+            uniq2 = df_sys.drop_duplicates(subset=['ean_sys']).dropna(subset=['ean_sys'])
+            uniq2 = uniq2[uniq2['ean_sys'] != ''].set_index('ean_sys')
+            mp2   = uniq2['preco_sys'].to_dict()
+            mn2   = uniq2['nome_sys'].to_dict()
+            df_base.loc[mask, 'preco_sys'] = df_base.loc[mask, 'ref_xml'].map(mp2)
+            df_base.loc[mask, 'ean_sys']   = df_base.loc[mask, 'ref_xml']  # ref_xml é o EAN
+            df_base.loc[mask, 'nome_sys']  = df_base.loc[mask, 'ref_xml'].map(mn2)
 
         df_base = df_base.copy()
         df_base.loc[:, 'preco_sys'] = df_base['preco_sys'].fillna(0.0)
+        df_base.loc[:, 'nome_sys']  = df_base['nome_sys'].fillna('')
         df_base.loc[:, 'sku_final'] = df_base.apply(
             lambda r: r['ean_sys'] if pd.notna(r['ean_sys']) and str(r['ean_sys']).strip() != ""
                       else r['ean_xml'], axis=1)
         df_base.loc[:, 'qtd_emb']   = df_base.apply(
-            lambda r: extrair_qtd_embalagem(r['desc_xml'], r['vUnCom'], r['preco_sys'], P_MULT),
+            lambda r: extrair_qtd_embalagem(r['desc_xml'], r['vUnCom'], r['preco_sys'], P_MULT,
+                                            str(r['nome_sys'])),
             axis=1)
 
         rows = []

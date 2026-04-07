@@ -220,3 +220,59 @@ class TestPrioridadeDePatterns:
         # "12 CANECAS CAIXA COM 6" → Padrão 1 encontra 6, Padrão 2 encontraria 12
         # Padrão 1 é testado primeiro → retorna 6
         assert extrair_qtd_embalagem("12 CANECAS CAIXA COM 6 UND", 30.0, 3.0, 2.0) == 6
+
+    def test_cx_prevalece_sobre_c_generico(self):
+        # REGRESSÃO (NF Akash): "CONJUNTO C/ 03 PCS... CX C/120"
+        # C/ genérico está antes do CX C/ na descrição — o genérico matchava primeiro.
+        # Após a separação em _PATTERN_EMB_ESPECIFICO vs _PATTERN_EMB_GENERICO,
+        # CX C/ deve ser encontrado primeiro → retorna 120.
+        desc = "CONJUNTO C/ 03 PCS DE GANCHO MULTIUSO, DE METAL COM VENTOSA CX C/120"
+        assert extrair_qtd_embalagem(desc, 192.0, 2.0, 2.0) == 120
+
+    def test_c_generico_funciona_quando_unico(self):
+        # Sem padrões específicos na descrição, C/ genérico ainda deve funcionar.
+        assert extrair_qtd_embalagem("PRODUTO GENERICO C/5", 25.0, 5.0, 2.0) == 5
+
+
+# ─── Padrão 5 — IP-N (itens por pacote) ──────────────────────────────────────
+
+class TestPadraoIP:
+    """
+    Padrão 5: r'\\bIP-(\\d+)\\b'
+    Convenção de fornecedores (ex: Affinity Trade): "IP-18 TRB" = 18 itens/caixa.
+    Presente no NOME do sistema, ausente no XML (descrição truncada a ~120 chars).
+
+    REGRESSÃO (NF 62 / Affinity Trade):
+      uCom=CAIXAS, vUnCom=369.85 (preço por caixa de 18 unidades).
+      XML truncado não continha "IP-18"; sistema continha "- IP-18 TRB".
+      Sem a detecção, nf_u = 369.85 (errado) em vez de 369.85/18 = 20.55.
+    """
+
+    def test_ip_no_desc_xml(self):
+        # IP-N presente no próprio XML → detecta direto
+        assert extrair_qtd_embalagem("BLOCOS DE MONTAR IP-18 TRB", 369.85, 179.90, 2.0) == 18
+
+    def test_ip_apenas_no_desc_sys(self):
+        # XML truncado, sem IP-N; NOME do sistema tem "IP-18 TRB" → desc_sys detecta
+        desc_xml = "LJ-001 - MODELO REF:. MON04 - BLOCOS DE MONTAR - AZUL, VERDE, AMARELO"
+        desc_sys = "LJ-001 - REF MON04 - BLOCOS DE MONTAR - AZUL VERDE AMARELO - IP-18 TRB"
+        assert extrair_qtd_embalagem(desc_xml, 369.85, 179.90, 2.0, desc_sys) == 18
+
+    @pytest.mark.parametrize("ref,vUnCom,desc_sys,esperado", [
+        ("MON04", 369.85, "LJ-001 - REF MON04 - BLOCOS DE MONTAR - IP-18 TRB", 18),
+        ("MON05", 383.62, "LJ-001 - REF MON05 - BLOCOS DE MONTAR - IP-36 TRB", 36),
+        ("PLA007", 287.72, "LJ1-11-2 - REF PLA007 - BRINQUEDO LANCA AGUA - IP-60 TRB", 60),
+        ("PLA005", 397.29, "LJ-555 - REF PLA005 - BRINQUEDO LANCA AGUA - IP-120 TRB", 120),
+    ])
+    def test_affinity_trade_nf62_todos_produtos(self, ref, vUnCom, desc_sys, esperado):
+        """Valida os 4 produtos da NF 62 da Affinity Trade — todos uCom=CAIXAS."""
+        desc_xml = f"LJ-001 - MODELO REF:. {ref} - PRODUTO BRINQUEDO"  # truncado, sem IP-N
+        assert extrair_qtd_embalagem(desc_xml, vUnCom, 50.0, 2.0, desc_sys) == esperado
+
+    def test_ip_anti_absurdo_unitario(self):
+        # IP-500 numa caixa de R$2 → unitário R$0.004 < R$0.10 → retorna 1
+        assert extrair_qtd_embalagem("PRODUTO IP-500", 2.0, 5.0, 2.0) == 1
+
+    def test_sem_ip_sem_desc_sys(self):
+        # Nenhum dos dois tem IP → cai para outros padrões / retorna 1
+        assert extrair_qtd_embalagem("PRODUTO GENERICO SEM CONTAGEM", 50.0, 25.0, 2.0) == 1

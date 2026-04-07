@@ -299,21 +299,50 @@ A API tem timeout de 10s. Se falhar:
 
 ## 6. Regras de Preço e Fallback
 
-### 6.1 Busca de preço no CSV do sistema
+### 6.1 Campos do XML utilizados no processamento
+
+| Campo XML | Significado | Usado para |
+|-----------|-------------|------------|
+| `cProd`   | Código interno do produto no sistema do **fornecedor** | Chave de merge com CSV (Tentativa 2 e 3) |
+| `cEAN`    | EAN/código de barras oficial (GTIN-13) | Chave de merge com CSV (Tentativa 1) |
+| `xProd`   | Descrição do produto (máx. 120 chars — pode estar truncada) | Detecção de embalagem, exibição |
+| `uCom`    | Unidade comercial (`UN`, `CX`, `CAIXAS`, etc.) | Informativo — não altera cálculo diretamente |
+| `qCom`    | Quantidade comprada na unidade comercial | Divisor do custo total por linha |
+| `vUnCom`  | Preço unitário na unidade comercial (ex: preço de 1 caixa) | Base do `nf_u` antes da divisão por `qtd_emb` |
+| `vProd`   | Valor total da linha = `qCom × vUnCom` | Validação |
+| `vICMSST` | Valor de ICMS-ST total da linha | `st_u` (dividido por `qCom × qtd_emb`) |
+| `vIPI`    | Valor de IPI total da linha | `ipi_u` |
+| `pICMS`   | Alíquota de ICMS (%) | `cred_pct` por produto |
+| `CST`/`CSOSN` | Situação tributária | Zera crédito ICMS se isento |
+
+### 6.2 Campos do CSV utilizados no processamento
+
+| Campo CSV   | Significado | Usado para |
+|-------------|-------------|------------|
+| `BARRA`     | EAN/código de barras do produto no sistema | Chave de merge (Tentativa 1 e 3) |
+| `REFERÊNCIA`| Código interno do produto no sistema | Chave de merge (Tentativa 2) |
+| `NOME`      | Nome completo do produto | Detecção de embalagem (fallback quando XML truncado) |
+| `PREÇO`     | Preço de venda cadastrado | `p_atual` → `p_var` |
+
+### 6.3 Busca de preço no CSV do sistema
 
 ```
-Tentativa 1: JOIN por EAN (campo BARRA no CSV == cEAN no XML)
-    → Se preço encontrado e > 0.01: usar
+Tentativa 1: JOIN por EAN   (cEAN do XML == BARRA do CSV)
+    → Caso padrão: fornecedor preencheu cEAN corretamente
 
-Tentativa 2 (fallback): JOIN por REF (campo REFERÊNCIA no CSV == cProd no XML)
-    → Se preço encontrado e > 0.01: usar
+Tentativa 2: JOIN por REF   (cProd do XML == REFERÊNCIA do CSV)
+    → Fallback: fornecedor não tem EAN mas o cProd bate com o código interno
 
-Tentativa 3 (fallback final): sem preço no sistema
+Tentativa 3: JOIN cruzado   (cProd do XML == BARRA do CSV)
+    → Fallback: fornecedor colocou o EAN no campo cProd e deixou cEAN="SEM GTIN"
+    → Caso documentado: Mohnish (NF 24330)
+
+Tentativa 4 (fallback final): sem match em nenhuma tentativa
     → p_atual = 0
     → p_var = arredondar_99(c_real × 2)  ← preço calculado automático
 ```
 
-### 6.2 Detecção de embalagem
+### 6.4 Detecção de embalagem
 
 ```
 Regex: (?:CAIXA COM|PACOTE COM|KIT COM|PCT\s*C/|CX\s*C/|C/)\s*(\d+)
@@ -326,7 +355,7 @@ SE match e qtd_emb > 1:
             p_atual = p_sys × qtd_emb
 ```
 
-### 6.3 Arredondar 99
+### 6.5 Arredondar 99
 
 Função aplicada quando não há preço no sistema:
 ```

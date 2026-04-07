@@ -3,6 +3,7 @@ import sys
 import tempfile
 import webbrowser
 from threading import Timer
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from flask import Flask, render_template, request, jsonify, send_file
 
 from core.processador import gerar_tabela, salvar_excel_estilizado, gerar_dashboard_html, CRED_CORES
@@ -95,146 +96,173 @@ def index():
     return render_template('index.html')
 
 
-@app.route('/processar', methods=['POST'])
-def processar():
+_COL_HEADERS = [
+    'NF', 'DESCRIÇÃO', 'REF', 'SKU', 'QTD',
+    'NF UNIT', 'ST UNIT', 'ANT UNIT', 'IPI UNIT',
+    'FRETE', 'DESPESA', 'CRED ICMS',
+    'C. REAL', 'C. ENTRADA', 'CST',
+    'FEDERAL', 'CARTÃO', 'ICMS S.', 'C. SAÍDA',
+    'META %', 'PREÇO MÍN VRJ',
+    'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM',
+    'NF ATC', 'PREÇO ATC PEDIDO', 'PREÇO ATC PDV',
+    'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
+    'MARGEM ATC PED', 'MARGEM ATC PDV', 'PREÇO PCT ATC', 'P. COMPRA PCT',
+]
+_AZUL = {15, 16, 17, 18, 20, 22, 23}
+_AMAR = set(range(24, 35))
+
+
+def _gerar_tabela_html(rows, metricas):
+    html  = '<table class="table table-sm table-bordered table-hover"><thead>'
+    html += '<tr>'
+    html += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
+    html += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
+    html += '<th colspan="11" style="background:#fef9c3;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#92400e">ATACADO</th>'
+    html += '</tr><tr>'
+    html += ''.join(f'<th>{h}</th>' for h in _COL_HEADERS)
+    html += '</tr></thead><tbody>'
+
+    for row, m in zip(rows[:20], metricas[:20]):
+        has_st  = row['tem_st']
+        has_ant = row['tem_ant']
+        html += '<tr>'
+        cells = [
+            row['nf'],
+            row['desc'][:55],
+            row['ref'],
+            row['sku'],
+            int(row['qtd']),
+            f"R$ {row['nf_u']:.2f}",
+            f"R$ {row['st_u']:.2f}"  if row['st_u']  > 0.001 else '-',
+            f"R$ {row['ant_u']:.2f}" if row['ant_u'] > 0.001 else '-',
+            f"R$ {row['ipi_u']:.2f}" if row['ipi_u'] > 0.001 else '-',
+            f"R$ {m['frete']:.2f}",
+            f"R$ {m['desp']:.2f}",
+            m['cred'],
+            f"R$ {m['c_real']:.2f}",
+            f"R$ {m['c_ent']:.2f}",
+            row['cst'],
+            f"R$ {m['fed']:.2f}",
+            f"R$ {m['cartao']:.2f}",
+            f"R$ {m['icms_s']:.2f}",
+            f"R$ {m['c_saida']:.2f}",
+            '15%',
+            f"R$ {m['p_min']:.2f}",
+            f"R$ {row['p_atual']:.2f}" if row['p_atual'] > 0 else '<span style="color:#e74c3c">SEM PREÇO</span>',
+            f"R$ {m['p_var']:.2f}",
+            f"{m['margem']*100:.1f}%",
+            f"R$ {m['nf_atc']:.2f}",
+            f"R$ {m['p_atc_ped']:.2f}",
+            f"R$ {m['p_atc_pdv']:.2f}",
+            f"R$ {m['fed_atc']:.2f}",
+            f"R$ {m['cart_atc']:.2f}",
+            f"R$ {m['icm_atc']:.2f}",
+            f"R$ {m['c_saida_atc']:.2f}",
+            f"{m['margem_atc_ped']*100:.1f}%",
+            f"{m['margem_atc_pdv']*100:.1f}%",
+            f"R$ {round(m['p_atc_ped'] * row['qtd_emb'], 2):.2f}",
+            f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",
+        ]
+        for idx, val in enumerate(cells):
+            if idx == 11:
+                pct_val = row.get('cred_pct', 0.0) if m['cred'] > 0 else 0.0
+                cor_hex = CRED_CORES.get(round(pct_val, 4), 'FFFFFF')
+                display = f"R$ {val:.2f}" if isinstance(val, (int, float)) else str(val)
+                html += f'<td style="background:#{cor_hex};font-weight:600">{display}</td>'
+                continue
+            if has_st:
+                style = ' style="background:#FCE4D6"'
+            elif idx in _AZUL:
+                style = ' style="background:#BDD7EE;font-weight:600"'
+            elif idx in _AMAR:
+                style = ' style="background:#FFF2CC;font-weight:600"'
+            elif has_ant:
+                style = ' style="background:#D1FAE5"'
+            else:
+                style = ''
+            html += f'<td{style}>{val}</td>'
+        html += '</tr>'
+
+    html += '</tbody></table>'
+    if len(rows) > 20:
+        html += f'<p class="text-muted small">Mostrando 20 de {len(rows)} produtos. Baixe o Excel para ver todos.</p>'
+    return html
+
+
+def _processar_lote(xml_path, csv_path, params, lote_index):
+    """Processa um lote independente. Seguro para rodar em thread paralela."""
+    fornecedor = params.get('fornecedor', 'FORNECEDOR').strip()
+    nota       = params.get('nota', '000').strip()
+    label      = f"{fornecedor} — NF {nota}"
     try:
-        xml_file = request.files.get('xml')
-        csv_file = request.files.get('csv')
-        params   = request.form.to_dict()
-
-        if not xml_file or not csv_file:
-            return jsonify({'sucesso': False, 'erro': 'Por favor, anexe os arquivos XML e CSV.'})
-
-        xml_path = os.path.join(TEMP_DIR, 'nfe_temp.xml')
-        csv_path = os.path.join(TEMP_DIR, 'sys_temp.csv')
-        xml_file.save(xml_path)
-        csv_file.save(csv_path)
-
-        fornecedor = params.get('fornecedor', 'FORNECEDOR').strip()
-        nota       = params.get('nota', '000').strip()
-
         sucesso, resultado = gerar_tabela(xml_path, csv_path, fornecedor, nota, params)
-
         if not sucesso:
-            return jsonify({'sucesso': False, 'erro': resultado})
+            return lote_index, {'label': label, 'erro': resultado}
 
         rows, P, num_nf = resultado
+        label = f"{fornecedor} — NF {num_nf}"
 
-        nome_excel   = f"Precificacao_{fornecedor}_NF_{nota}.xlsx"
+        nome_excel    = f"Precificacao_{fornecedor.replace(' ', '_')}_NF_{num_nf}_{lote_index}.xlsx"
         caminho_excel = os.path.join(TEMP_DIR, nome_excel)
         salvar_excel_estilizado(resultado, caminho_excel)
 
         metricas    = [_calcular(row, P) for row in rows]
         lucro_total = sum(m['lucro'] for m in metricas)
 
-        col_headers = [
-            'NF', 'DESCRIÇÃO', 'REF', 'SKU', 'QTD',
-            'NF UNIT', 'ST UNIT', 'ANT UNIT', 'IPI UNIT',
-            'FRETE', 'DESPESA', 'CRED ICMS',
-            'C. REAL', 'C. ENTRADA', 'CST',
-            'FEDERAL', 'CARTÃO', 'ICMS S.', 'C. SAÍDA',
-            'META %', 'PREÇO MÍN VRJ',
-            'PREÇO ATUAL', 'PREÇO VAREJO', 'MARGEM',
-            'NF ATC', 'PREÇO ATC PEDIDO', 'PREÇO ATC PDV',
-            'FEDERAL ATC', 'CARTÃO ATC', 'ICMS ATC', 'C. SAÍDA ATC',
-            'MARGEM ATC PED', 'MARGEM ATC PDV', 'PREÇO PCT ATC', 'P. COMPRA PCT',
-        ]
-
-        html  = '<table class="table table-sm table-bordered table-hover"><thead>'
-        html += '<tr>'
-        html += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
-        html += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
-        html += '<th colspan="11" style="background:#fef9c3;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#92400e">ATACADO</th>'
-        html += '</tr><tr>'
-        html += ''.join(f'<th>{h}</th>' for h in col_headers)
-        html += '</tr></thead><tbody>'
-
-        # idx 0-based: 15=FEDERAL 16=CARTÃO 17=ICMS S. 18=C.SAÍDA 20=PREÇO MÍN VRJ 22=P.VAREJO 23=MARGEM
-        _AZUL = {15, 16, 17, 18, 20, 22, 23}
-        # idx 24-34: todo o bloco atacado (NF ATC até P. COMPRA PCT)
-        _AMAR = set(range(24, 35))
-
-        for row, m in zip(rows[:20], metricas[:20]):
-            has_st  = row['tem_st']
-            has_ant = row['tem_ant']
-
-            html += '<tr>'
-
-            cells = [
-                row['nf'],
-                row['desc'][:55],
-                row['ref'],
-                row['sku'],
-                int(row['qtd']),
-                f"R$ {row['nf_u']:.2f}",
-                f"R$ {row['st_u']:.2f}"  if row['st_u']  > 0.001 else '-',
-                f"R$ {row['ant_u']:.2f}" if row['ant_u'] > 0.001 else '-',
-                f"R$ {row['ipi_u']:.2f}" if row['ipi_u'] > 0.001 else '-',
-                f"R$ {m['frete']:.2f}",
-                f"R$ {m['desp']:.2f}",
-                m['cred'],  # 11 — valor R$ do crédito (já filtrado por CST/ST em _calcular)
-                f"R$ {m['c_real']:.2f}",
-                f"R$ {m['c_ent']:.2f}",
-                row['cst'],
-                f"R$ {m['fed']:.2f}",
-                f"R$ {m['cartao']:.2f}",
-                f"R$ {m['icms_s']:.2f}",
-                f"R$ {m['c_saida']:.2f}",
-                '15%',
-                f"R$ {m['p_min']:.2f}",
-                f"R$ {row['p_atual']:.2f}" if row['p_atual'] > 0 else '<span style="color:#e74c3c">SEM PREÇO</span>',
-                f"R$ {m['p_var']:.2f}",
-                f"{m['margem']*100:.1f}%",
-                f"R$ {m['nf_atc']:.2f}",
-                f"R$ {m['p_atc_ped']:.2f}",
-                f"R$ {m['p_atc_pdv']:.2f}",
-                f"R$ {m['fed_atc']:.2f}",
-                f"R$ {m['cart_atc']:.2f}",
-                f"R$ {m['icm_atc']:.2f}",
-                f"R$ {m['c_saida_atc']:.2f}",
-                f"{m['margem_atc_ped']*100:.1f}%",
-                f"{m['margem_atc_pdv']*100:.1f}%",
-                f"R$ {round(m['p_atc_ped'] * row['qtd_emb'], 2):.2f}",   # PREÇO PCT ATC
-                f"R$ {round(row['nf_u'] * row['qtd_emb'], 2):.2f}",      # P. COMPRA PCT
-            ]
-
-            for idx, val in enumerate(cells):
-                # Índice 11 = CRED ICMS — cor indica o % de origem
-                if idx == 11:
-                    pct_val = row.get('cred_pct', 0.0) if m['cred'] > 0 else 0.0
-                    cor_hex = CRED_CORES.get(round(pct_val, 4), 'FFFFFF')
-                    display = f"R$ {val:.2f}" if isinstance(val, (int, float)) else str(val)
-                    html += f'<td style="background:#{cor_hex};font-weight:600">{display}</td>'
-                    continue
-                if has_st:
-                    style = ' style="background:#FCE4D6"'
-                elif idx in _AZUL:
-                    style = ' style="background:#BDD7EE;font-weight:600"'
-                elif idx in _AMAR:
-                    style = ' style="background:#FFF2CC;font-weight:600"'
-                elif has_ant:
-                    style = ' style="background:#D1FAE5"'
-                else:
-                    style = ''
-                html += f'<td{style}>{val}</td>'
-
-            html += '</tr>'
-
-        html += '</tbody></table>'
-        if len(rows) > 20:
-            html += f'<p class="text-muted small">Mostrando 20 de {len(rows)} produtos. Baixe o Excel para ver todos.</p>'
-
-        dashboard_html = gerar_dashboard_html(rows, lucro_total, metricas, num_nf=num_nf)
-
-        return jsonify({
-            'sucesso':      True,
-            'tabela':       html,
-            'dashboard':    dashboard_html,
+        return lote_index, {
+            'label':        label,
+            'tabela':       _gerar_tabela_html(rows, metricas),
+            'dashboard':    gerar_dashboard_html(rows, lucro_total, metricas, num_nf=num_nf),
             'download_url': f'/download/{nome_excel}',
             'total_itens':  len(rows),
-        })
+            'erro':         None,
+        }
+    except Exception:
+        import traceback
+        return lote_index, {'label': label, 'erro': traceback.format_exc()}
 
-    except Exception as e:
+
+@app.route('/processar', methods=['POST'])
+def processar():
+    try:
+        global_params = request.form.to_dict()
+        lote_count    = min(int(global_params.get('lote_count', 1)), 3)
+
+        # Salva arquivos e monta lista de lotes
+        lotes = []
+        for i in range(lote_count):
+            xml_file = request.files.get(f'xml_{i}')
+            csv_file = request.files.get(f'csv_{i}')
+            if not xml_file or not csv_file:
+                return jsonify({'sucesso': False, 'erro': f'Lote {i+1}: arquivos XML e CSV são obrigatórios.'})
+
+            xml_path = os.path.join(TEMP_DIR, f'nfe_temp_{i}.xml')
+            csv_path = os.path.join(TEMP_DIR, f'sys_temp_{i}.csv')
+            xml_file.save(xml_path)
+            csv_file.save(csv_path)
+
+            params = {
+                **global_params,
+                'fornecedor': global_params.get(f'fornecedor_{i}', 'FORNECEDOR').strip(),
+                'nota':       global_params.get(f'nota_{i}', '000').strip(),
+            }
+            lotes.append((xml_path, csv_path, params))
+
+        # Processa em paralelo (gargalo é a chamada HTTP à API SEFAZ)
+        resultados = [None] * lote_count
+        with ThreadPoolExecutor(max_workers=lote_count) as ex:
+            futures = {
+                ex.submit(_processar_lote, xml_path, csv_path, params, i): i
+                for i, (xml_path, csv_path, params) in enumerate(lotes)
+            }
+            for future in as_completed(futures):
+                idx, resultado = future.result()
+                resultados[idx] = resultado
+
+        algum_sucesso = any(r.get('erro') is None for r in resultados)
+        return jsonify({'sucesso': algum_sucesso, 'resultados': resultados})
+
+    except Exception:
         import traceback
         return jsonify({'sucesso': False, 'erro': traceback.format_exc()})
 
