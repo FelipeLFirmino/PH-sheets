@@ -464,11 +464,17 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
             q       = max(float(row['qCom']), 1)
             qtd_emb = int(row['qtd_emb'])
 
-            # Dividir custos NF pela embalagem → tudo por UNIDADE vendida
-            nf_u    = round(row['vProd'] / q / qtd_emb, 2)
-            st_u    = round(row['vST']   / q / qtd_emb, 2)
-            ant_u   = round(row['vANT']  / q / qtd_emb, 2)
-            ipi_u   = round(row['vIPI']  / q / qtd_emb, 2)
+            # Valores por unidade comercial (pré-embalagem) — usados como constantes nas fórmulas Excel
+            nf_u_raw  = row['vProd'] / q
+            st_u_raw  = row['vST']   / q
+            ant_u_raw = row['vANT']  / q
+            ipi_u_raw = row['vIPI']  / q
+
+            # Dividir custos NF pela embalagem → tudo por UNIDADE vendida (usado no dashboard/preview)
+            nf_u    = round(nf_u_raw  / qtd_emb, 2)
+            st_u    = round(st_u_raw  / qtd_emb, 2)
+            ant_u   = round(ant_u_raw / qtd_emb, 2)
+            ipi_u   = round(ipi_u_raw / qtd_emb, 2)
             cst     = str(row['cst'])
 
             # Flags de cor baseadas nos valores BRUTOS (antes da divisão por embalagem)
@@ -494,6 +500,10 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'st_u':      st_u,
                 'ant_u':     ant_u,
                 'ipi_u':     ipi_u,
+                'nf_u_raw':  nf_u_raw,
+                'st_u_raw':  st_u_raw,
+                'ant_u_raw': ant_u_raw,
+                'ipi_u_raw': ipi_u_raw,
                 'cst':       cst,
                 'p_atual':   preco_venda_base,
                 'p_sys_raw': p_sys_val,
@@ -612,6 +622,9 @@ def salvar_excel_estilizado(dados, path):
         has_ant = row['tem_ant']
         cst     = row['cst']
 
+        # Letra da coluna AUDIT_EMB — usada nas fórmulas de NF_U/ST_U/ANT_U/IPI_U
+        AK_emb = L(COL['AUDIT_EMB'])
+
         # Letras das colunas para fórmulas
         F  = L(COL['NF_U'])       # NF UNIT
         G  = L(COL['ST_U'])       # ST
@@ -647,12 +660,27 @@ def salvar_excel_estilizado(dados, path):
         _c(ws, r, COL['REF'],   row['ref'])
         _c(ws, r, COL['SKU'],   row['sku'])
         _c(ws, r, COL['QTD'],   row['qtd'])
-        _c(ws, r, COL['NF_U'],  row['nf_u'],  fmt='#,##0.00')
-        _c(ws, r, COL['ST_U'],  row['st_u'],  fmt='#,##0.00')
-        _c(ws, r, COL['ANT_U'], row['ant_u'], fmt='#,##0.00')
-        _c(ws, r, COL['IPI_U'], row['ipi_u'], fmt='#,##0.00')
         _c(ws, r, COL['CST'],   cst)
         _c(ws, r, COL['P_ATUAL'], row['p_atual'], fmt='#,##0.00')
+
+        # NF_U/ST_U/ANT_U/IPI_U como fórmulas referenciando AUDIT_EMB (AK)
+        # Alterar AK (qtd embalagem) recalcula toda a planilha em cascata.
+        # MAX(1, AK) evita divisão por zero se o usuário zerar a célula.
+        def _raw_fmt(val):
+            # Serializa o valor raw com casas decimais suficientes para não perder precisão
+            return f"{val:.6f}"
+
+        for col_key, raw_val in (
+            ('NF_U',  row['nf_u_raw']),
+            ('ST_U',  row['st_u_raw']),
+            ('ANT_U', row['ant_u_raw']),
+            ('IPI_U', row['ipi_u_raw']),
+        ):
+            cell = ws.cell(row=r, column=COL[col_key])
+            cell.value         = f"=ROUND({_raw_fmt(raw_val)}/MAX(1,{AK_emb}{r}),2)"
+            cell.number_format = '#,##0.00'
+            cell.border        = BORDA
+            cell.alignment     = ALI_CTR
 
         # META % — editável por produto, padrão 15%
         mc = ws.cell(row=r, column=COL['META'], value=0.15)
@@ -787,15 +815,12 @@ def salvar_excel_estilizado(dados, path):
             f"=IF({Zb}{r}>0,ROUND(({Zb}{r}-{AD}{r})/{Zb}{r},4),0)"
         )
 
-        AI_emb = L(COL['AUDIT_EMB'])
-
         # AF - PREÇO PCT ATC = P_ATC × QTD_EMB (preço de venda do pacote no atacado)
-        ws.cell(r, COL['P_PCT_ATC']).value = f"=ROUND({Za}{r}*{AI_emb}{r},2)"
+        ws.cell(r, COL['P_PCT_ATC']).value = f"=ROUND({Za}{r}*{AK_emb}{r},2)"
         ws.cell(r, COL['P_PCT_ATC']).number_format = '#,##0.00'
 
         # AG - P. COMPRA PCT = NF_U × QTD_EMB (preço de compra do pacote — custo NF por caixa)
-        F_nfu = L(COL['NF_U'])
-        ws.cell(r, COL['P_COMPRA_PCT']).value = f"=ROUND({F_nfu}{r}*{AI_emb}{r},2)"
+        ws.cell(r, COL['P_COMPRA_PCT']).value = f"=ROUND({F}{r}*{AK_emb}{r},2)"
         ws.cell(r, COL['P_COMPRA_PCT']).number_format = '#,##0.00'
 
         # ── Formato numérico para colunas de fórmula ─────────────────────────

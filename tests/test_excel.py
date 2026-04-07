@@ -53,6 +53,13 @@ def _make_full_row(**kwargs):
     base = make_row()
     base.update(defaults)
     base.update(kwargs)
+    # Derivar valores raw (por unidade comercial, antes da divisão por qtd_emb)
+    # a partir dos valores já definidos — espelha o que gerar_tabela() faz.
+    qtd_emb = base.get('qtd_emb', 1) or 1
+    for key in ('nf_u', 'st_u', 'ant_u', 'ipi_u'):
+        raw_key = key + '_raw'
+        if raw_key not in base:
+            base[raw_key] = base.get(key, 0.0) * qtd_emb
     return base
 
 
