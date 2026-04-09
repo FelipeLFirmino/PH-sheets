@@ -267,10 +267,29 @@ class TestAtacado:
 
     def test_margem_atc_pdv_formula(self, P_zero):
         P_zero['desc_atc_pdv'] = 0.0   # sem desconto → p_atc_pdv = p_var
-        # cred_pct=0.0 → c_ent=5.0 → c_saida_atc=5.0 → margem_atc_pdv=0.5
+        # cred_pct=0.0 → c_ent=5.0 → c_saida_vrj=5.0 → margem_atc_pdv=0.5
         row = make_row(nf_u=5.0, p_atual=10.0, cred_pct=0.0)
         m = _calcular(row, P_zero)
         assert m['margem_atc_pdv'] == pytest.approx(0.5)
+
+    def test_margem_atc_pdv_usa_c_saida_varejo(self, P_zero):
+        """MARGEM ATC PDV usa c_saida do varejo (não c_saida_atc).
+
+        Com taxas de varejo não-zero, c_saida > c_saida_atc porque varejo
+        aplica os impostos sobre o preço de venda (mais alto), enquanto atacado
+        aplica sobre NF_ATC. A margem PDV deve refletir o custo de saída varejo.
+        """
+        P_zero['fed'] = 0.10
+        P_zero['icm'] = 0.10
+        # desc_atc_pdv=0 → p_atc_pdv = p_var = 20; sem desconto para isolar o custo
+        row = make_row(nf_u=10.0, p_atual=20.0, cred_pct=0.0)
+        m = _calcular(row, P_zero)
+        # c_saida     = c_ent(10) + fed(2.0) + icms_s(2.0) = 14.0
+        # c_saida_atc = c_ent(10) + fed_atc(1.0) + icm_atc(1.0) = 12.0
+        # margem_atc_pdv = (20 - 14) / 20 = 0.3  (usa c_saida, não c_saida_atc)
+        assert m['c_saida']     == pytest.approx(14.0)
+        assert m['c_saida_atc'] == pytest.approx(12.0)
+        assert m['margem_atc_pdv'] == pytest.approx(0.3)
 
     def test_margem_atc_pdv_maior_que_ped(self, P_zero):
         """PDV tem menor desconto → preço mais alto → margem maior que PED."""

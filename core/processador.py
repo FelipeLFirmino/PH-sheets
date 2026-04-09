@@ -191,8 +191,10 @@ def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple
     Combina vICMSST do XML com os dados da API SEFAZ AL por produto.
 
     Regra:
-    - tipoImposto='ST': API valorIcmsCalculado já está em vICMSST do XML.
+    - tipoImposto='ST' e v_st_xml > 0: ICMS já está em vICMSST do XML.
       Adiciona apenas valorFecoepCalculado (FECOEP não está no XML).
+    - tipoImposto='ST' e v_st_xml = 0: XML não carrega ST (NF sem destaque de ST).
+      Usa ICMS + FECOEP completos da API.
     - tipoImposto='ANT': XML tem zero. Adiciona ICMS + FECOEP completos da API.
 
     Returns: (vST_total, vANT_total)
@@ -209,8 +211,12 @@ def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple
         if item.get('tipoImposto') == 'ANT':
             v_ant += v_icms + v_fecoep
         else:
-            # ST: ICMS já contabilizado em vICMSST do XML — só soma FECOEP
-            v_st_fecoep += v_fecoep
+            # ST: se XML já tem vICMSST, ICMS está contabilizado — só soma FECOEP
+            # Se XML tem vICMSST=0, NF não destaca ST — usa ICMS + FECOEP completos da API
+            if v_st_xml > 0.005:
+                v_st_fecoep += v_fecoep
+            else:
+                v_st_fecoep += v_icms + v_fecoep
     return v_st_xml + v_st_fecoep, v_ant
 
 
@@ -810,9 +816,10 @@ def salvar_excel_estilizado(dados, path):
             f"=IF({Za}{r}>0,ROUND(({Za}{r}-{AD}{r})/{Za}{r},4),0)"
         )
 
-        # AF - MARGEM ATC PDV = (P_ATC_PDV − C_SAIDA_ATC) / P_ATC_PDV
+        # AF - MARGEM ATC PDV = (P_ATC_PDV − C_SAIDA_VRJ) / P_ATC_PDV
+        # base de custo: C_SAIDA do varejo (não do atacado)
         ws.cell(r, COL['MARGEM_ATC_PDV']).value = (
-            f"=IF({Zb}{r}>0,ROUND(({Zb}{r}-{AD}{r})/{Zb}{r},4),0)"
+            f"=IF({Zb}{r}>0,ROUND(({Zb}{r}-{S}{r})/{Zb}{r},4),0)"
         )
 
         # AF - PREÇO PCT ATC = P_ATC × QTD_EMB (preço de venda do pacote no atacado)

@@ -69,7 +69,7 @@ def _calcular(row, P):
     icm_atc     = 0.0 if st_u > 0.005 else max(0.0, round(nf_atc * P['icm'], 2) - ant_u)
     c_saida_atc     = round(c_ent + fed_atc + cart_atc + icm_atc, 2)
     margem_atc_ped  = round((p_atc_ped - c_saida_atc) / p_atc_ped, 4) if p_atc_ped > 0 else 0.0
-    margem_atc_pdv  = round((p_atc_pdv - c_saida_atc) / p_atc_pdv, 4) if p_atc_pdv > 0 else 0.0
+    margem_atc_pdv  = round((p_atc_pdv - c_saida) / p_atc_pdv, 4) if p_atc_pdv > 0 else 0.0
 
     return dict(c_real=c_real, frete=frete, desp=desp, cred=cred,
                 c_ent=c_ent, fed=fed, cartao=cartao, icms_s=icms_s,

@@ -202,8 +202,15 @@ Passo 19 — CUSTO SAÍDA ATC (col AD)
     = ROUND(C_ENT + FED_ATC + CART_ATC + ICM_ATC, 2)
     ← Usa o mesmo C_ENT do varejo (custo de entrada é igual)
 
-Passo 20 — MARGEM ATC (col AE)
-    = IF(P_ATC > 0, ROUND((P_ATC − C_SAÍDA_ATC) / P_ATC, 4), 0)
+Passo 20 — MARGEM ATC PED (col AE)
+    = IF(P_ATC_PED > 0, ROUND((P_ATC_PED − C_SAÍDA_ATC) / P_ATC_PED, 4), 0)
+    ← usa C_SAÍDA_ATC (custo atacado) como base
+
+Passo 21 — MARGEM ATC PDV (col AF)
+    = IF(P_ATC_PDV > 0, ROUND((P_ATC_PDV − C_SAÍDA) / P_ATC_PDV, 4), 0)
+    ← usa C_SAÍDA do varejo — regra de negócio: margem PDV reflete os impostos
+       de saída do varejo para que o chefe possa substituir P_VAREJO e ver a
+       margem real do PDV atacado imediatamente
 ```
 
 ### Crédito de ICMS por Origem
