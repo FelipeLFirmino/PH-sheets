@@ -25,28 +25,17 @@ O Railway só recebe o push depois que o código chegou em `main`. Com branch pr
 | Arquivo | Função |
 |---------|--------|
 | `.github/workflows/ci.yml` | Roda `pytest` a cada push/PR em `main` |
-| `nixpacks.toml` | Configura o build no Railway: Python 3.12, instala `requirements-server.txt`, inicia com gunicorn |
-| `requirements-server.txt` | Dependências do servidor — sem PyInstaller, Pillow, macholib (só desktop) |
-| `Procfile` | Fallback de start caso o Railway ignore o nixpacks.toml |
+| `Procfile` | Instrui o Railway a iniciar com gunicorn na porta dinâmica `$PORT` |
+| `requirements.txt` | Usado pelo Railway no build (detectado automaticamente) |
+| `requirements-server.txt` | Usado pelo CI — versão limpa sem PyInstaller, Pillow, macholib |
 
 ---
 
-## Por que Python 3.12 no servidor
+## Por que numpy 2.x e pandas 2.2.3
 
-O projeto usa Python 3.14 localmente (macOS). O Railway usa Python 3.13 por padrão, mas `pandas==2.2.1` e `numpy==1.26.4` não têm wheels pré-compiladas para 3.13 — o pip tenta compilar do zero e falha. Python 3.12 tem wheels prontas para essas versões, o build é instantâneo.
+O projeto usa Python 3.14 localmente (macOS). O Railway usa Python 3.13 via `mise` — essa versão não pode ser alterada por `nixpacks.toml` ou variáveis de ambiente; o Railway ignora essas configurações.
 
-O `nixpacks.toml` fixa isso:
-
-```toml
-[phases.setup]
-nixPkgs = ["python312"]
-
-[phases.install]
-cmds = ["pip install -r requirements-server.txt"]
-
-[start]
-cmd = "gunicorn app:app --bind 0.0.0.0:$PORT --workers 2 --timeout 120"
-```
+`numpy==1.26.4` e `pandas==2.2.1` não têm wheels pré-compiladas para Python 3.13 — o pip tenta compilar do fonte e falha. As versões `numpy==2.2.4` e `pandas==2.2.3` têm wheels `cp313` no PyPI e instalam sem compilação.
 
 ---
 
