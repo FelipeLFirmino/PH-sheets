@@ -1,5 +1,6 @@
 import os
 import sys
+import html
 import tempfile
 import webbrowser
 from threading import Timer
@@ -89,6 +90,7 @@ else:
     app = Flask(__name__)
 
 TEMP_DIR = tempfile.gettempdir()
+app.config['MAX_CONTENT_LENGTH'] = 10 * 1024 * 1024  # 10 MB por upload
 
 
 @app.route('/')
@@ -113,24 +115,24 @@ _AMAR = set(range(24, 35))
 
 
 def _gerar_tabela_html(rows, metricas):
-    html  = '<table class="table table-sm table-bordered table-hover"><thead>'
-    html += '<tr>'
-    html += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
-    html += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
-    html += '<th colspan="11" style="background:#fef9c3;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#92400e">ATACADO</th>'
-    html += '</tr><tr>'
-    html += ''.join(f'<th>{h}</th>' for h in _COL_HEADERS)
-    html += '</tr></thead><tbody>'
+    out  = '<table class="table table-sm table-bordered table-hover"><thead>'
+    out += '<tr>'
+    out += '<th colspan="15" style="background:#f8f9fa;text-align:center"></th>'
+    out += '<th colspan="9" style="background:#dbeafe;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#1d4ed8">VAREJO</th>'
+    out += '<th colspan="11" style="background:#fef9c3;text-align:center;font-size:0.7rem;letter-spacing:1px;color:#92400e">ATACADO</th>'
+    out += '</tr><tr>'
+    out += ''.join(f'<th>{h}</th>' for h in _COL_HEADERS)
+    out += '</tr></thead><tbody>'
 
     for row, m in zip(rows[:20], metricas[:20]):
         has_st  = row['tem_st']
         has_ant = row['tem_ant']
-        html += '<tr>'
+        out += '<tr>'
         cells = [
             row['nf'],
-            row['desc'][:55],
-            row['ref'],
-            row['sku'],
+            html.escape(row['desc'][:55]),
+            html.escape(str(row['ref'])),
+            html.escape(str(row['sku'])),
             int(row['qtd']),
             f"R$ {row['nf_u']:.2f}",
             f"R$ {row['st_u']:.2f}"  if row['st_u']  > 0.001 else '-',
@@ -168,7 +170,7 @@ def _gerar_tabela_html(rows, metricas):
                 pct_val = row.get('cred_pct', 0.0) if m['cred'] > 0 else 0.0
                 cor_hex = CRED_CORES.get(round(pct_val, 4), 'FFFFFF')
                 display = f"R$ {val:.2f}" if isinstance(val, (int, float)) else str(val)
-                html += f'<td style="background:#{cor_hex};font-weight:600">{display}</td>'
+                out += f'<td style="background:#{cor_hex};font-weight:600">{display}</td>'
                 continue
             if has_st:
                 style = ' style="background:#FCE4D6"'
@@ -180,13 +182,13 @@ def _gerar_tabela_html(rows, metricas):
                 style = ' style="background:#D1FAE5"'
             else:
                 style = ''
-            html += f'<td{style}>{val}</td>'
-        html += '</tr>'
+            out += f'<td{style}>{val}</td>'
+        out += '</tr>'
 
-    html += '</tbody></table>'
+    out += '</tbody></table>'
     if len(rows) > 20:
-        html += f'<p class="text-muted small">Mostrando 20 de {len(rows)} produtos. Baixe o Excel para ver todos.</p>'
-    return html
+        out += f'<p class="text-muted small">Mostrando 20 de {len(rows)} produtos. Baixe o Excel para ver todos.</p>'
+    return out
 
 
 def _processar_lote(xml_path, csv_path, params, lote_index):
@@ -269,7 +271,10 @@ def processar():
 
 @app.route('/download/<filename>')
 def download(filename):
-    caminho = os.path.join(TEMP_DIR, filename)
+    # Impede path traversal: garante que o arquivo resolvido está dentro de TEMP_DIR
+    caminho = os.path.realpath(os.path.join(TEMP_DIR, filename))
+    if not caminho.startswith(os.path.realpath(TEMP_DIR) + os.sep):
+        return jsonify({'erro': 'Arquivo inválido.'}), 400
     return send_file(caminho, as_attachment=True)
 
 

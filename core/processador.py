@@ -1,5 +1,6 @@
 import re
 import json
+import html
 import pandas as pd
 import xml.etree.ElementTree as ET
 import requests
@@ -1092,8 +1093,8 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None, num_nf=None)
     alertas = [r for r in rows_data if r['p_atual'] <= 0]
     if alertas:
         linhas = "".join(
-            f"<tr><td style='padding:5px 10px'>{a['ref']}</td>"
-            f"<td style='padding:5px 10px'>{a['desc'][:60]}</td>"
+            f"<tr><td style='padding:5px 10px'>{html.escape(str(a['ref']))}</td>"
+            f"<td style='padding:5px 10px'>{html.escape(a['desc'][:60])}</td>"
             f"<td style='padding:5px 10px;color:#c0392b;font-weight:600'>Sem preço no sistema</td></tr>"
             for a in alertas
         )
@@ -1135,7 +1136,7 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None, num_nf=None)
                     f'<div style="display:flex;align-items:center;gap:10px">'
                     f'<span style="font-size:11px;color:#555;width:195px;min-width:195px;'
                     f'overflow:hidden;text-overflow:ellipsis;white-space:nowrap" '
-                    f'title="{p["desc"]}">{p["desc"]}</span>'
+                    f'title="{html.escape(p["desc"])}">{html.escape(p["desc"])}</span>'
                     f'<div style="flex:1;background:#f0f4f8;border-radius:4px;height:18px;overflow:hidden">'
                     f'<div id="ph-bar-{i}" style="height:100%;width:{w:.1f}%;background:{cor};'
                     f'border-radius:4px;transition:width 0.25s ease"></div></div>'
