@@ -10,16 +10,22 @@ Bug documentado (NF 13215 / 2026-03-09):
   O valorFecoepCalculado (FECOEP — Fundo de Combate à Pobreza) NÃO está no
   XML e DEVE ser somado ao vST mesmo para produtos ST.
 
+Bug documentado (NF 59263 / 2026-04-07):
+  Algumas NFs não destacam ST no XML (vICMSST=0), mas a API SEFAZ AL retorna
+  os valores completos (ICMS + FECOEP). O código somava apenas FECOEP,
+  ignorando o ICMS da API → st_u ficava apenas com o FECOEP (ex: R$0,47
+  ao invés de R$8,67 por unidade).
+
 Regras:
-  - tipoImposto='ST'  → só adiciona valorFecoepCalculado ao vST do XML
-  - tipoImposto='ANT' → adiciona valorIcmsCalculado + valorFecoepCalculado
-                        (XML tem zero para ANT)
+  - tipoImposto='ST' e vICMSST_xml > 0 → só adiciona valorFecoepCalculado (ICMS já no XML)
+  - tipoImposto='ST' e vICMSST_xml = 0 → adiciona valorIcmsCalculado + valorFecoepCalculado (NF sem destaque)
+  - tipoImposto='ANT'                  → adiciona valorIcmsCalculado + valorFecoepCalculado (XML tem zero)
 """
 import pytest
 from core.processador import merge_impostos_api
 
 
-# ─── Fixtures de payloads API reais (NF 13215) ───────────────────────────────
+# ─── Fixtures de payloads API reais (NF 13215) ──────────────────────────────
 
 KIT_PRENDEDOR_CX180_API = {
     'descricaoProduto':     'KIT PRENDEDOR DE CABELO E ESPONJA DE MAQUIAGEM CX180',
@@ -202,3 +208,97 @@ class TestValoresPorUnidade:
             f"st_u/nf_u={ratio:.0%} — ICMS provavelmente dobrado. "
             f"vST={vST:.2f}, nf_u={nf_u:.2f}"
         )
+
+
+# ─── Fixtures de payloads API reais (NF 59263) ──────────────────────────────
+
+VENTILADOR_PRETO_API = {
+    'descricaoProduto':     'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO',
+    'tipoImposto':          'ST',
+    'valorIcmsCalculado':   2458.57,
+    'valorFecoepCalculado': 142.83,
+}
+VENTILADOR_BRANCO_PRETO_API = {
+    'descricaoProduto':     'VENTILADOR PEDESTAL 220V - 50W - FUTURO - BRANCO COM PRETO',
+    'tipoImposto':          'ST',
+    'valorIcmsCalculado':   1639.04,
+    'valorFecoepCalculado': 95.22,
+}
+
+
+# ─── NF sem destaque de ST (vICMSST=0 no XML) ────────────────────────────────
+
+class TestProdutoST_SemDestaqueNF:
+    """
+    Bug NF 59263 (2026-04-07): NF não destaca ST no XML (vICMSST=0), mas a API
+    retorna os valores completos. O código anterior somava só FECOEP → st_u
+    ficava com ~R$0,47 ao invés de ~R$8,67 por unidade.
+
+    Quando v_st_xml=0 e tipoImposto='ST', deve usar ICMS + FECOEP da API.
+    """
+
+    def test_st_sem_destaque_xml_usa_icms_e_fecoep_api(self):
+        """v_st_xml=0 → vST deve ser icms + fecoep da API (não só fecoep)."""
+        vST, vANT = merge_impostos_api(
+            0.0,
+            'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO',
+            [VENTILADOR_PRETO_API],
+        )
+        assert vST  == pytest.approx(2458.57 + 142.83)  # 2601.40
+        assert vANT == pytest.approx(0.0)
+
+    def test_st_sem_destaque_xml_nao_usa_so_fecoep(self):
+        """REGRESSÃO: comportamento antigo retornava apenas fecoep (142.83)."""
+        vST, _ = merge_impostos_api(
+            0.0,
+            'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO',
+            [VENTILADOR_PRETO_API],
+        )
+        assert vST != pytest.approx(142.83), "st_u está usando apenas FECOEP — ICMS ausente"
+
+    def test_st_sem_destaque_valor_unitario_correto(self):
+        """
+        Dados reais NF 59263: qty=300, vProd=6379.41, vICMSST=0.
+        API: icms=2458.57, fecoep=142.83.
+        Esperado: st_u = (2458.57 + 142.83) / 300 ≈ 8.67.
+        """
+        vST, _ = merge_impostos_api(
+            0.0,
+            'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO',
+            [VENTILADOR_PRETO_API],
+        )
+        st_u = round(vST / 300, 2)
+        assert st_u == pytest.approx(8.67)
+
+    def test_st_com_destaque_xml_nao_usa_icms_api(self):
+        """
+        Garante que o comportamento antigo (v_st_xml > 0) não regrediu:
+        quando XML já tem vICMSST, ainda deve somar só FECOEP.
+        """
+        v_st_xml = 2458.57  # XML tem o valor
+        vST, _ = merge_impostos_api(
+            v_st_xml,
+            'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO',
+            [VENTILADOR_PRETO_API],
+        )
+        # Correto: XML + fecoep apenas
+        assert vST == pytest.approx(2458.57 + 142.83)
+        # Errado seria: 2458.57 + 2458.57 + 142.83 (double-count)
+        assert vST != pytest.approx(2458.57 + 2458.57 + 142.83)
+
+    def test_dois_produtos_st_sem_destaque_nao_contaminam(self):
+        """
+        Dois produtos ST sem destaque na mesma NF.
+        Cada um deve receber apenas os valores do seu item da API.
+        """
+        dados_api = [VENTILADOR_PRETO_API, VENTILADOR_BRANCO_PRETO_API]
+
+        vST_preto, _ = merge_impostos_api(
+            0.0, 'VENTILADOR PEDESTAL 220V - 50W - FUTURO - PRETO', dados_api
+        )
+        vST_branco, _ = merge_impostos_api(
+            0.0, 'VENTILADOR PEDESTAL 220V - 50W - FUTURO - BRANCO COM PRETO', dados_api
+        )
+
+        assert vST_preto  == pytest.approx(2458.57 + 142.83)   # 2601.40
+        assert vST_branco == pytest.approx(1639.04 + 95.22)    # 1734.26

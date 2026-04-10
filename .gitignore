@@ -1,2 +1,24 @@
 /dist
 .env
+
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+
+# Tests
+.pytest_cache/
+.coverage
+htmlcov/
+
+# macOS
+.DS_Store
+
+# Claude Code internals
+.claude/
+
+# Installers
+*.spec
+build/
