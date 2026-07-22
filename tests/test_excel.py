@@ -14,7 +14,7 @@ import os
 import tempfile
 import pytest
 from tests.conftest import make_row
-from core.processador import salvar_excel_estilizado, COL
+from core.processador import salvar_excel_estilizado, COL, F_RATEIO
 from openpyxl import load_workbook
 
 
@@ -119,6 +119,43 @@ class TestExcelGeracaoSemErros:
         try:
             salvar_excel_estilizado(dados, path)
             assert os.path.exists(path)
+        finally:
+            os.unlink(path)
+
+    def test_produto_rateado_marca_desc_e_colore_st_ant(self, P):
+        """
+        Produto com 'rateado'=True (contagem XML != contagem API para a mesma
+        descrição — ver parear_impostos_api) deve: (1) ganhar o prefixo de
+        aviso na descrição e (2) ter ST_U/ANT_U pintados de vermelho (F_RATEIO)
+        para conferência manual, independente de ser linha ST/ANT/normal.
+        """
+        row = _make_full_row(nf_u=10.0, ant_u=2.0, tem_ant=True, rateado=True,
+                              desc='ABAJUR DECORATIVO CX12')
+        dados = ([row], P, '0001')
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            path = f.name
+        try:
+            salvar_excel_estilizado(dados, path)
+            wb = load_workbook(path)
+            ws = wb['Precificação']
+            assert ws.cell(3, COL['DESC']).value.startswith('⚠ CONFERIR IMPOSTO')
+            assert ws.cell(3, COL['ST_U']).fill.start_color.rgb  == '00FF0000'
+            assert ws.cell(3, COL['ANT_U']).fill.start_color.rgb == '00FF0000'
+        finally:
+            os.unlink(path)
+
+    def test_produto_nao_rateado_nao_pinta_vermelho(self, P):
+        """Produto normal (rateado=False) não deve ter ST_U/ANT_U em vermelho."""
+        row = _make_full_row(nf_u=10.0, ant_u=2.0, tem_ant=True, rateado=False)
+        dados = ([row], P, '0001')
+        with tempfile.NamedTemporaryFile(suffix='.xlsx', delete=False) as f:
+            path = f.name
+        try:
+            salvar_excel_estilizado(dados, path)
+            wb = load_workbook(path)
+            ws = wb['Precificação']
+            assert not ws.cell(3, COL['DESC']).value.startswith('⚠')
+            assert ws.cell(3, COL['ST_U']).fill.start_color.rgb != '00FF0000'
         finally:
             os.unlink(path)
 

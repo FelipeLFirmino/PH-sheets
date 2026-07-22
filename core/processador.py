@@ -187,9 +187,9 @@ def get_xml_text(node, xpath, ns, default=""):
     return default
 
 
-def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple:
+def _aplicar_registro_api(v_st_xml: float, registro: dict) -> tuple:
     """
-    Combina vICMSST do XML com os dados da API SEFAZ AL por produto.
+    Aplica um único registro da API SEFAZ AL sobre o vICMSST do XML.
 
     Regra:
     - tipoImposto='ST' e v_st_xml > 0: ICMS já está em vICMSST do XML.
@@ -200,25 +200,87 @@ def merge_impostos_api(v_st_xml: float, desc_xml: str, dados_api: list) -> tuple
 
     Returns: (vST_total, vANT_total)
     """
-    v_st_fecoep = 0.0
-    v_ant       = 0.0
-    desc_upper  = desc_xml.strip().upper()
-    for item in dados_api:
-        api_desc = str(item.get('descricaoProduto', '')).strip().upper()
-        if api_desc not in desc_upper:
-            continue
-        v_icms   = float(item.get('valorIcmsCalculado',  0) or 0)
-        v_fecoep = float(item.get('valorFecoepCalculado', 0) or 0)
-        if item.get('tipoImposto') == 'ANT':
-            v_ant += v_icms + v_fecoep
+    v_icms   = float(registro.get('valorIcmsCalculado',  0) or 0)
+    v_fecoep = float(registro.get('valorFecoepCalculado', 0) or 0)
+    if registro.get('tipoImposto') == 'ANT':
+        return v_st_xml, v_icms + v_fecoep
+    if v_st_xml > 0.005:
+        return v_st_xml + v_fecoep, 0.0
+    return v_st_xml + v_icms + v_fecoep, 0.0
+
+
+def parear_impostos_api(itens_xml: list, dados_api: list) -> dict:
+    """
+    Pareia itens do XML com registros da API SEFAZ AL por descrição EXATA
+    (não substring) e, dentro de cada grupo de descrição idêntica, por
+    POSIÇÃO — o item N-ésimo do XML com aquela descrição casa com o
+    registro N-ésimo da API (ordenado por `id`) com a mesma descrição.
+
+    Confirmado empiricamente (NF 16750, 33260649682710000138550010000167501001682880):
+    a API retorna os registros na mesma ordem dos itens <det> do XML,
+    inclusive preservando erros de digitação do fornecedor na descrição
+    (ex: "30M X 60CM" em vez de "30CM X 60CM") — o que garante que
+    `descricaoProduto` da API é o texto completo e literal do XML, não uma
+    versão truncada/genérica. Isso torna a igualdade exata seguro e o
+    pareamento posicional dentro do grupo verificável (valores diferentes
+    de vProd dentro do mesmo grupo resultam em impostos proporcionalmente
+    diferentes, na mesma ordem).
+
+    Quando a contagem de itens do XML não bate com a contagem de registros
+    da API para a mesma descrição exata (não observado até agora, mas não
+    garantido pela SEFAZ), cai em rateio proporcional a vProd — e marca o
+    item como 'rateado' para conferência manual, em vez de arriscar um
+    pareamento posicional não verificável.
+
+    itens_xml: lista de dicts com pelo menos 'desc_xml', 'v_st_xml', 'vProd'
+    Returns: dict {indice_em_itens_xml: (vST_total, vANT_total, rateado: bool)}
+    """
+    from collections import defaultdict
+
+    grupos_xml = defaultdict(list)
+    for idx, item in enumerate(itens_xml):
+        grupos_xml[item['desc_xml'].strip().upper()].append(idx)
+
+    grupos_api = defaultdict(list)
+    for rec in sorted(dados_api, key=lambda r: r.get('id') or 0):
+        chave = str(rec.get('descricaoProduto', '')).strip().upper()
+        grupos_api[chave].append(rec)
+
+    resultados = {}
+    for desc, idxs in grupos_xml.items():
+        recs = grupos_api.get(desc, [])
+
+        if len(recs) == len(idxs):
+            for idx, rec in zip(idxs, recs):
+                v_st_xml = itens_xml[idx]['v_st_xml']
+                vst, vant = _aplicar_registro_api(v_st_xml, rec)
+                resultados[idx] = (vst, vant, False)
+        elif recs:
+            # Contagem não bate — rateio proporcional a vProd, sinalizado.
+            total_vprod = sum(max(itens_xml[i]['vProd'], 0) for i in idxs)
+            pesos = (
+                {i: itens_xml[i]['vProd'] / total_vprod for i in idxs}
+                if total_vprod > 0 else
+                {i: 1.0 / len(idxs) for i in idxs}
+            )
+            icms_ant = sum(float(r.get('valorIcmsCalculado', 0) or 0)   for r in recs if r.get('tipoImposto') == 'ANT')
+            feco_ant = sum(float(r.get('valorFecoepCalculado', 0) or 0) for r in recs if r.get('tipoImposto') == 'ANT')
+            icms_st  = sum(float(r.get('valorIcmsCalculado', 0) or 0)   for r in recs if r.get('tipoImposto') != 'ANT')
+            feco_st  = sum(float(r.get('valorFecoepCalculado', 0) or 0) for r in recs if r.get('tipoImposto') != 'ANT')
+            for idx in idxs:
+                peso = pesos[idx]
+                v_st_xml = itens_xml[idx]['v_st_xml']
+                if v_st_xml > 0.005:
+                    v_st = v_st_xml + peso * feco_st
+                else:
+                    v_st = v_st_xml + peso * (icms_st + feco_st)
+                v_ant = peso * (icms_ant + feco_ant)
+                resultados[idx] = (v_st, v_ant, True)
         else:
-            # ST: se XML já tem vICMSST, ICMS está contabilizado — só soma FECOEP
-            # Se XML tem vICMSST=0, NF não destaca ST — usa ICMS + FECOEP completos da API
-            if v_st_xml > 0.005:
-                v_st_fecoep += v_fecoep
-            else:
-                v_st_fecoep += v_icms + v_fecoep
-    return v_st_xml + v_st_fecoep, v_ant
+            for idx in idxs:
+                resultados[idx] = (itens_xml[idx]['v_st_xml'], 0.0, False)
+
+    return resultados
 
 
 def extrair_qtd_embalagem(desc_xml, v_un_xml, p_sys, mult, desc_sys=''):
@@ -354,31 +416,6 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
             desc_xml = get_xml_text(p, 'nfe:xProd', ns, "SEM DESCRICAO")
             v_st_xml = float(get_xml_text(i, './/nfe:vICMSST', ns, "0"))
 
-            vST_total, v_ant_api = merge_impostos_api(v_st_xml, desc_xml, dados_api)
-
-            # Log detalhado para diagnóstico
-            matches_log = []
-            for item in dados_api:
-                api_desc = str(item.get('descricaoProduto', '')).strip().upper()
-                if api_desc in desc_xml.strip().upper():
-                    v_icms   = float(item.get('valorIcmsCalculado',  0) or 0)
-                    v_fecoep = float(item.get('valorFecoepCalculado', 0) or 0)
-                    tipo = item.get('tipoImposto')
-                    matches_log.append(
-                        f"tipo={tipo!r} icms={v_icms:.4f} fecoep={v_fecoep:.4f} "
-                        f"api_desc={api_desc[:40]!r}"
-                    )
-
-            print(f"[PRODUTO] {desc_xml[:60]!r}")
-            print(f"  vICMSST (XML) = {v_st_xml:.4f}")
-            if matches_log:
-                print(f"  matches SEFAZ API ({len(matches_log)}):")
-                for ml in matches_log:
-                    print(f"    → {ml}")
-            else:
-                print(f"  matches SEFAZ API: nenhum")
-            print(f"  vST_total={vST_total:.4f}  v_ant_api={v_ant_api:.4f}")
-
             cst = ""
             p_icms_xml = 0.0
             icms_node = i.find('.//nfe:ICMS', ns) if i is not None else None
@@ -405,12 +442,27 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'vUnCom':   float(get_xml_text(p, 'nfe:vUnCom', ns, "0")),
                 'vProd':    float(get_xml_text(p, 'nfe:vProd',  ns, "0")),
                 'vIPI':     float(get_xml_text(i, './/nfe:vIPI', ns, "0")),
-                'vST':      vST_total,
-                'vANT':     v_ant_api,
+                'v_st_xml': v_st_xml,
                 'nf_base':  num_nf,
                 'cst':      cst,
                 'pICMS':    p_icms_xml,
             })
+
+        # Pareia todos os itens do XML com os registros da API de uma vez —
+        # necessário para agrupar por descrição exata e casar por posição
+        # dentro de cada grupo (ver docstring de parear_impostos_api).
+        pareamento = parear_impostos_api(itens_xml, dados_api)
+
+        print(f"\n{'='*70}")
+        print(f"[MERGE IMPOSTOS] {len(itens_xml)} item(ns) do XML × {len(dados_api)} registro(s) da API")
+        for idx, item in enumerate(itens_xml):
+            vst, vant, rateado = pareamento[idx]
+            item['vST']  = vst
+            item['vANT'] = vant
+            item['rateado'] = rateado
+            flag = " [RATEADO — conferir]" if rateado else ""
+            print(f"  [{idx}] {item['desc_xml'][:55]!r}  vST={vst:.4f}  vANT={vant:.4f}{flag}")
+        print(f"{'='*70}\n")
 
         df_xml = pd.DataFrame(itens_xml)
 
@@ -518,6 +570,7 @@ def gerar_tabela(xml_path, csv_path, fornecedor, nota_ref, params):
                 'cred_pct':  cred_pct,
                 'tem_st':    tem_st,
                 'tem_ant':   tem_ant,
+                'rateado':   bool(row.get('rateado', False)),
             })
 
         params_out = {
@@ -547,6 +600,7 @@ F_PELE     = _fill("FCE4D6")
 F_CINZA    = _fill("D9D9D9")
 F_VERDE    = _fill("E2EFDA")
 F_PARAM    = _fill("F2F2F2")
+F_RATEIO   = _fill("FF0000")  # vermelho — ST_U/ANT_U estimados por rateio (conferir manualmente)
 BORDA   = _borda()
 ALI_CTR = Alignment(horizontal='center', vertical='center')
 
@@ -662,8 +716,11 @@ def salvar_excel_estilizado(dados, path):
         AJc = L(COL['AUDIT_CRED'])      # taxa de crédito ICMS por produto
 
         # Valores fixos (vêm do XML/CSV)
+        desc_final = row['desc']
+        if row.get('rateado'):
+            desc_final = f"⚠ CONFERIR IMPOSTO — {desc_final}"
         _c(ws, r, COL['NF'],    row['nf'])
-        _c(ws, r, COL['DESC'],  row['desc'])
+        _c(ws, r, COL['DESC'],  desc_final)
         _c(ws, r, COL['REF'],   row['ref'])
         _c(ws, r, COL['SKU'],   row['sku'])
         _c(ws, r, COL['QTD'],   row['qtd'])
@@ -896,6 +953,13 @@ def salvar_excel_estilizado(dados, path):
             for c in _amar:
                 ws.cell(r, c).fill = F_AMAR
 
+        # ST_U/ANT_U em vermelho quando o valor veio de rateio (contagem XML ≠
+        # contagem API para a mesma descrição) — sobrepõe qualquer cor de linha,
+        # pois é um alerta de conferência manual, não uma classificação fiscal.
+        if row.get('rateado'):
+            ws.cell(r, COL['ST_U']).fill  = F_RATEIO
+            ws.cell(r, COL['ANT_U']).fill = F_RATEIO
+
     # ── Legenda de crédito ICMS (só se houver mais de uma faixa na NF) ────────
     taxas_usadas = sorted(set(round(row['cred_pct'], 4) for row in rows))
     if taxas_usadas:  # sempre exibe legenda quando há ao menos uma faixa
@@ -921,6 +985,23 @@ def salvar_excel_estilizado(dados, path):
             c2.border = BORDA
             ws.merge_cells(start_row=lr, start_column=2,
                            end_row=lr, end_column=4)
+
+    # ── Legenda de rateio (só se houver algum produto rateado) ────────────────
+    if any(row.get('rateado') for row in rows):
+        rat_row = len(rows) + 4 + (1 + len(taxas_usadas) + 1 if taxas_usadas else 0)
+        c1 = ws.cell(rat_row, 1)
+        c1.value  = 'RATEADO'
+        c1.fill   = F_RATEIO
+        c1.font   = Font(bold=True, color="FFFFFF")
+        c1.border = BORDA
+        c1.alignment = ALI_CTR
+        c2 = ws.cell(rat_row, 2)
+        c2.value  = ('ST/ANT estimado por rateio — a SEFAZ retornou uma quantidade de '
+                     'registros diferente da quantidade de itens dessa descrição na NF. '
+                     'Confira manualmente o imposto desse produto.')
+        c2.border = BORDA
+        ws.merge_cells(start_row=rat_row, start_column=2,
+                       end_row=rat_row, end_column=8)
 
     # ── Largura das colunas ───────────────────────────────────────────────────
     widths = {
@@ -1111,6 +1192,30 @@ def gerar_dashboard_html(rows_data, lucro_total=0.0, metricas=None, num_nf=None)
               <th style="padding:6px 10px;text-align:left">STATUS</th>
             </tr></thead>
             <tbody>{linhas}</tbody>
+          </table>
+        </div>"""
+
+    rateio_alertas = [r for r in rows_data if r.get('rateado')]
+    if rateio_alertas:
+        linhas_rateio = "".join(
+            f"<tr><td style='padding:5px 10px'>{html.escape(str(a['ref']))}</td>"
+            f"<td style='padding:5px 10px'>{html.escape(a['desc'][:60])}</td>"
+            f"<td style='padding:5px 10px;color:#c0392b;font-weight:600'>ST/ANT estimado por rateio</td></tr>"
+            for a in rateio_alertas
+        )
+        alertas_html += f"""
+        <div style="margin-top:20px">
+          <div style="font-weight:700;font-size:13px;color:#c0392b;margin-bottom:8px">
+            ⚠️ {len(rateio_alertas)} produto(s) com ST/ANT estimado por rateio — confira manualmente
+          </div>
+          <table style="width:100%;border-collapse:collapse;font-size:12px;background:#fdf2f2;
+                        border-radius:8px;overflow:hidden">
+            <thead><tr style="background:#fdecea">
+              <th style="padding:6px 10px;text-align:left">REF</th>
+              <th style="padding:6px 10px;text-align:left">DESCRIÇÃO</th>
+              <th style="padding:6px 10px;text-align:left">STATUS</th>
+            </tr></thead>
+            <tbody>{linhas_rateio}</tbody>
           </table>
         </div>"""
 

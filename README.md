@@ -116,6 +116,19 @@ Preço Mín.    = Custo Saída ÷ (1 - Meta%)
 - 🟢 **Verde:** Coluna META % (editável por produto)
 - 🍑 **Pêssego:** Linhas com ST > 0
 - ⚫ **Cinza:** Colunas de auditoria (P.Unit Sistema / Qtd Emb.)
+- 🔴 **Vermelho (só nas células ST/ANT):** valor de ST/ANT **estimado por rateio** — ver seção [Conferência de ST/ANT rateado](#-conferência-de-stant-rateado) abaixo
+
+### ⚠️ Conferência de ST/ANT rateado
+
+Quando uma nota tem vários produtos diferentes com a **mesma descrição** (ex: variações de cor/tamanho do mesmo item), o sistema casa cada produto do XML com o imposto correspondente retornado pela SEFAZ AL, na mesma ordem em que aparecem na nota — isso resolve corretamente o caso mais comum.
+
+Em casos raros, se a quantidade de produtos com aquela descrição na nota **não bater** com a quantidade de valores que a SEFAZ retornou pra ela, o sistema não arrisca adivinhar qual valor pertence a qual produto: ele **divide o total proporcionalmente** entre os produtos e sinaliza a linha para conferência manual:
+
+- A **descrição do produto** ganha o prefixo `⚠ CONFERIR IMPOSTO —`.
+- Só as **células de ST e ANT** dessa linha ficam **vermelhas** (o resto da linha mantém a cor normal — pêssego, verde menta, azul, etc).
+- No rodapé da planilha, abaixo da legenda de crédito ICMS, aparece uma legenda vermelha explicando o alerta.
+
+Nesses casos, confira manualmente o valor de ST/ANT desses produtos antes de fechar o preço.
 
 ### Comportamento das Fórmulas
 Todos os campos calculados são gravados como **fórmulas Excel reais** — alterar qualquer parâmetro na linha 2 recalcula toda a planilha automaticamente. O arquivo é gerado com `fullCalcOnLoad=True` para garantir recálculo imediato ao abrir no Mac.
@@ -131,6 +144,7 @@ Após processar, um painel é exibido abaixo da tabela com:
 - Margem estimada média
 - Barra de distribuição ST vs. Sem ST
 - Lista de alertas de produtos sem preço
+- Lista de alertas de produtos com ST/ANT estimado por rateio (ver [Conferência de ST/ANT rateado](#-conferência-de-stant-rateado))
 
 ---
 
